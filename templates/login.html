@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Login - CalDAV Web Client{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h4>Login to CalDAV Server</h4>
+            </div>
+            <div class="card-body">
+                {% if error %}
+                    <div class="alert alert-danger">{{ error }}</div>
+                {% endif %}
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="server_url" class="form-label">CalDAV Server URL</label>
+                        <input type="url" class="form-control" id="server_url" name="server_url" 
+                               value="{{ default_server_url }}" required
+                               placeholder="https://your-caldav-server.com">
+                        <div class="form-text">Enter your CalDAV server URL (without path)</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="server_type" class="form-label">Server Type</label>
+                        <select class="form-select" id="server_type" name="server_type">
+                            <option value="nextcloud" {% if default_server_type == 'nextcloud' %}selected{% endif %}>Nextcloud</option>
+                            <option value="baikal" {% if default_server_type == 'baikal' %}selected{% endif %}>Baikal (sabre.io)</option>
+                            <option value="radicale" {% if default_server_type == 'radicale' %}selected{% endif %}>Radicale</option>
+                            <option value="generic" {% if default_server_type == 'generic' %}selected{% endif %}>Generic CalDAV</option>
+                        </select>
+                        <div class="form-text">Select your CalDAV server type for correct URL formatting</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Username</label>
+                        <input type="text" class="form-control" id="username" name="username" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="password" name="password" required>
+                        <div class="form-text">For Nextcloud, consider using an app password</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Login</button>
+                </form>
+                
+                <div class="mt-4">
+                    <h6>Server Examples:</h6>
+                    <ul class="list-unstyled small text-muted">
+                        <li><strong>Nextcloud:</strong> https://cloud.example.com</li>
+                        <li><strong>Baikal:</strong> https://dav.example.com</li>
+                        <li><strong>Radicale:</strong> https://radicale.example.com:5232</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

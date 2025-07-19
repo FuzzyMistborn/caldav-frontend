@@ -1,0 +1,26 @@
+services:
+  caldav-client:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - CALDAV_SERVER_URL=https://calendar.example.com
+      - CALDAV_SERVER_TYPE=nextcloud  # Options: nextcloud, baikal, radicale, generic
+      - SECRET_KEY=YOUR_TOKEN  # Generate with `openssl rand -hex 32` or `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`
+      - FLASK_ENV=production
+      - LOG_LEVEL=info
+      - PORT=5000
+      # Database Configuration
+      - DATABASE_URL=sqlite:///data/caldav_client.db
+      # Session Configuration
+      - SESSION_LIFETIME_DAYS=7
+    user: "1000:1000" # Set to your user
+    volumes:
+      - /home/geoff/docker/caldav:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
