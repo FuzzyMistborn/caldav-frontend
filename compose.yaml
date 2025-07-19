@@ -1,6 +1,7 @@
 services:
-  caldav-client:
-    build: .
+  caldav-frontend:
+    image: ghcr.io/fuzzymistborn/caldav-frontend:latest
+    container_name: caldav-frontend
     ports:
       - "5000:5000"
     environment:
@@ -16,7 +17,7 @@ services:
       - SESSION_LIFETIME_DAYS=7
     user: "1000:1000" # Set to your user
     volumes:
-      - /home/geoff/docker/caldav:/app/data
+      - YOURPATH/docker/caldav:/app/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]

@@ -2,7 +2,7 @@
 
 A modern, web-based CalDAV client built with Flask that provides a calendar interface for managing events across multiple calendars. Perfect for connecting to Nextcloud, Baikal, Radicale, and other CalDAV servers.
 
-**THIS IS 100% VIBE/AI CODED.  DO NOT DEPLOY IN A PRODUCTION ENVIRNOMENT WITHOUT ADDITIONAL SECURITY/CODE REVIEW**
+🚨🚨🚨**THIS IS 100% VIBE/AI CODED.  DO NOT DEPLOY IN A PRODUCTION ENVIRNOMENT WITHOUT ADDITIONAL SECURITY/CODE REVIEW**🚨🚨🚨
 
 I wanted this because I'm thinking of moving away from Nextcloud but I need a good web-based CalDav frontend.  I couldn't find any I liked, so I asked Claude to make one for me.
 
@@ -37,7 +37,9 @@ I wanted this because I'm thinking of moving away from Nextcloud but I need a go
 
 ### Using Docker (Recommended)
 
-For now you'll need to build your own container.  I'll add more instructions later, but if you clone the repo you should be able to figure it out.
+See the example `compose.yaml`.
+
+Builds are available at `ghcr.io/fuzzymistborn/caldav-frontend`.  For now I'm not tagging releases beyond `latest` unless I start iterating further.
 
 ## ⚙️ Configuration
 
