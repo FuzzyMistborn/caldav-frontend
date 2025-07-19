@@ -37,7 +37,7 @@ I wanted this because I'm thinking of moving away from Nextcloud but I need a go
 
 ### Using Docker (Recommended)
 
-See the example `compose.yaml`.
+See the example [compose.yaml](compose.yaml).
 
 Builds are available at `ghcr.io/fuzzymistborn/caldav-frontend`.  For now I'm not tagging releases beyond `latest` unless I start iterating further.
 
