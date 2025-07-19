@@ -1,0 +1,30 @@
+steps:
+  - name: Build and push release
+    image: fuzzymistborn/docker-alpine-skopeo:latest
+    environment:
+      ghcr_pass:
+        from_secret: ghcr_pass
+    commands:
+      - docker login ghcr.io -u fuzzymistborn -p $ghcr_pass
+      - docker build -t ghcr.io/fuzzymistborn/caldav-frontend:latest .
+      - docker push --all-tags ghcr.io/fuzzymistborn/caldav-frontend
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  - name: Send TG Notification
+    image: appleboy/drone-telegram
+    settings:
+      token:
+        from_secret: tg_token
+      to:
+        from_secret: tg_id
+      format: markdown
+      message: "{{#success build.status}}✅  Build for `{{repo.name}}` was *successful*!{{else}}❌  Build for `{{repo.name}}` has *FAILED*!{{/success}} \n🌐  [Output]({{build.link}})\n📝  Commit: {{ commit.message }}"
+    when:
+      event: manual
+      status:
+        - success
+        - failure
+
+when:
+  event: manual
