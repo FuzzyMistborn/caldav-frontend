@@ -182,7 +182,12 @@
 
 {% block scripts %}
 <script>
+// Add this test at the very beginning
+console.log('=== JAVASCRIPT STARTING ===');
+alert('JavaScript is loading - check console for debug info');
+
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('=== DOM CONTENT LOADED ===');
     const calendarEl = document.getElementById('calendar');
     const calendarListEl = document.getElementById('calendarList');
     const eventModal = new bootstrap.Modal(document.getElementById('eventModal'));
