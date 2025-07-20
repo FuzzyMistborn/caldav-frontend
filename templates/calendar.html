@@ -307,6 +307,17 @@ document.addEventListener('DOMContentLoaded', function() {
             isSelecting = true;
             selectionStart = dayEl.getAttribute('data-date');
             console.log('Selection started:', selectionStart);
+            e.preventDefault(); // Prevent text selection
+        }
+    });
+    
+    calendarEl.addEventListener('mouseover', function(e) {
+        if (isSelecting) {
+            const dayEl = e.target.closest('.fc-daygrid-day');
+            if (dayEl) {
+                const currentDate = dayEl.getAttribute('data-date');
+                console.log('Selection dragging over:', currentDate);
+            }
         }
     });
     
@@ -317,10 +328,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 const selectionEnd = dayEl.getAttribute('data-date');
                 console.log('Selection ended:', selectionEnd);
                 
-                if (selectionStart && selectionEnd && selectionStart !== selectionEnd) {
-                    console.log('Multi-day selection detected:', selectionStart, 'to', selectionEnd);
-                    
-                    // Calculate proper date range
+                if (selectionStart) {
+                    // Always open modal, even for single day selection via drag
                     const startDate = new Date(selectionStart);
                     const endDate = new Date(selectionEnd);
                     
@@ -328,13 +337,30 @@ document.addEventListener('DOMContentLoaded', function() {
                     const actualStart = startDate <= endDate ? startDate : endDate;
                     const actualEnd = startDate <= endDate ? endDate : startDate;
                     
+                    const isMultiDay = selectionStart !== selectionEnd;
+                    
+                    console.log('Opening modal for drag selection:', {
+                        start: actualStart.toISOString().split('T')[0],
+                        end: actualEnd.toISOString().split('T')[0],
+                        isMultiDay: isMultiDay
+                    });
+                    
                     openEventModal(null, null, {
                         startDate: actualStart.toISOString().split('T')[0],
                         endDate: actualEnd.toISOString().split('T')[0],
-                        isMultiDay: true
+                        isMultiDay: isMultiDay
                     });
                 }
             }
+            isSelecting = false;
+            selectionStart = null;
+        }
+    });
+    
+    // Also listen for mouseup on document in case user drags outside calendar
+    document.addEventListener('mouseup', function(e) {
+        if (isSelecting) {
+            console.log('Mouse up outside calendar, ending selection');
             isSelecting = false;
             selectionStart = null;
         }
