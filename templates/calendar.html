@@ -188,6 +188,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const eventModal = new bootstrap.Modal(document.getElementById('eventModal'));
     const settingsModal = new bootstrap.Modal(document.getElementById('settingsModal'));
     
+    document.getElementById('eventModal').addEventListener('shown.bs.modal', function () {
+        document.getElementById('eventTitle').focus();
+        document.getElementById('eventTitle').select();
+    });
+
     let userSettings = { week_start: 0, calendar_colors: {} };
     
     const defaultCalendarColors = [
@@ -644,12 +649,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
         eventModal.show();
-
-        setTimeout(() => {
-            document.getElementById('eventTitle').focus();
-            document.getElementById('eventTitle').select(); // Optional: also select any existing text
-        }, 150);
-
+        
     }
 
     function toggleTimeInputs(isAllDay) {
