@@ -335,7 +335,6 @@ document.addEventListener('DOMContentLoaded', function() {
             // Time grid selection
             const currentView = calendar.view;
             if (currentView.type === 'timeGridDay' || currentView.type === 'timeGridWeek') {
-                console.log('Starting time selection...');
                 isTimeSelecting = true;
                 
                 // Try multiple ways to find the column and day date
@@ -344,7 +343,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 if (col) {
                     dayDate = col.getAttribute('data-date');
-                    console.log('Found day date from fc-timegrid-col:', dayDate);
                 }
                 
                 // If not found, try other approaches
@@ -354,7 +352,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     const headerCells = document.querySelectorAll('.fc-col-header-cell');
                     if (headerCells[colIndex]) {
                         dayDate = headerCells[colIndex].getAttribute('data-date');
-                        console.log('Found day date from header cell:', dayDate);
                     }
                 }
                 
@@ -363,18 +360,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (currentView.type === 'timeGridDay') {
                         // For day view, use the current date
                         dayDate = currentView.currentStart.toISOString().split('T')[0];
-                        console.log('Using current view date for day view:', dayDate);
                     }
                 }
-                
-                console.log('Final day date:', dayDate);
-                console.log('Column element:', col);
-                console.log('All column attributes:', col ? Array.from(col.attributes).map(a => `${a.name}="${a.value}"`).join(', ') : 'none');
                 
                 if (dayDate) {
                     // Calculate time based on position
                     const timeInfo = getTimeFromPosition(e, currentView);
-                    console.log('Time selection start:', { dayDate, timeInfo });
                     
                     if (timeInfo) {
                         timeSelectionStart = {
@@ -385,13 +376,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         };
                         timeSelectionEnd = timeSelectionStart;
                         e.preventDefault();
-                        console.log('Time selection initialized with:', timeSelectionStart);
                     } else {
-                        console.log('Failed to get time info');
                         isTimeSelecting = false;
                     }
                 } else {
-                    console.log('No day date found');
                     isTimeSelecting = false;
                 }
             }
@@ -532,10 +520,6 @@ document.addEventListener('DOMContentLoaded', function() {
             furthestDate = null;
         } else if (isTimeSelecting) {
             // Time grid selection end
-            console.log('Time selection mouseup');
-            console.log('Selection start:', timeSelectionStart);
-            console.log('Selection end:', timeSelectionEnd);
-            
             if (timeSelectionStart && timeSelectionEnd) {
                 // Create date-time objects
                 const startDate = timeSelectionStart.date;
@@ -564,14 +548,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 const isMultiDay = finalStartDate !== finalEndDate;
                 
-                console.log('Opening time-based modal:', {
-                    startDate: finalStartDate,
-                    endDate: finalEndDate,
-                    startTime: finalStartTime,
-                    endTime: finalEndTime,
-                    isMultiDay: isMultiDay
-                });
-                
                 openEventModal(null, null, {
                     startDate: finalStartDate,
                     endDate: finalEndDate,
@@ -580,8 +556,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     isMultiDay: isMultiDay,
                     isTimed: true
                 });
-            } else {
-                console.log('Missing selection start or end data');
             }
             
             isTimeSelecting = false;
@@ -603,7 +577,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         if (isTimeSelecting) {
-            console.log('Time selection ended outside calendar');
             isTimeSelecting = false;
             timeSelectionStart = null;
             timeSelectionEnd = null;
