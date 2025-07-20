@@ -102,6 +102,10 @@
 <script>
 console.log('Calendar script starting...');
 
+// Global variables to fix scoping issues
+let globalCalendar = null;
+let globalEventModal = null;
+
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM loaded, initializing calendar...');
     
@@ -118,7 +122,7 @@ document.addEventListener('DOMContentLoaded', function() {
             throw new Error('FullCalendar not loaded');
         }
         
-        const calendar = new FullCalendar.Calendar(calendarEl, {
+        globalCalendar = new FullCalendar.Calendar(calendarEl, {
             initialView: 'dayGridMonth',
             headerToolbar: {
                 left: 'prev,next today',
@@ -162,7 +166,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        calendar.render();
+        globalCalendar.render();
         debugInfo.innerHTML = '<strong>Success:</strong> Calendar rendered successfully';
         console.log('Calendar rendered successfully');
         
@@ -175,43 +179,8 @@ document.addEventListener('DOMContentLoaded', function() {
         calendarEl.innerHTML = `<div class="alert alert-danger">Error initializing calendar: ${error.message}</div>`;
     }
     
-    // Simple event modal functionality
-    const eventModal = new bootstrap.Modal(document.getElementById('eventModal'));
-    
-    function openEventModal(dateStr, event = null) {
-        console.log('Opening event modal:', { dateStr, event });
-        
-        if (event) {
-            document.getElementById('eventModalLabel').textContent = 'Edit Event';
-            document.getElementById('eventTitle').value = event.title || '';
-            document.getElementById('eventDescription').value = event.extendedProps?.description || '';
-            document.getElementById('eventId').value = event.id || '';
-            document.getElementById('eventUrl').value = event.extendedProps?.url || '';
-            
-            // Parse dates
-            const startDate = new Date(event.start);
-            const endDate = new Date(event.end || event.start);
-            
-            document.getElementById('eventStartDate').value = startDate.toISOString().split('T')[0];
-            document.getElementById('eventEndDate').value = endDate.toISOString().split('T')[0];
-            document.getElementById('eventStartTime').value = startDate.toTimeString().slice(0, 5);
-            document.getElementById('eventEndTime').value = endDate.toTimeString().slice(0, 5);
-        } else {
-            document.getElementById('eventModalLabel').textContent = 'New Event';
-            document.getElementById('eventForm').reset();
-            document.getElementById('eventId').value = '';
-            document.getElementById('eventUrl').value = '';
-            
-            if (dateStr) {
-                document.getElementById('eventStartDate').value = dateStr;
-                document.getElementById('eventEndDate').value = dateStr;
-                document.getElementById('eventStartTime').value = '09:00';
-                document.getElementById('eventEndTime').value = '10:00';
-            }
-        }
-        
-        eventModal.show();
-    }
+    // Initialize event modal
+    globalEventModal = new bootstrap.Modal(document.getElementById('eventModal'));
     
     // Save event functionality
     document.getElementById('saveEventBtn').addEventListener('click', function() {
@@ -247,6 +216,11 @@ document.addEventListener('DOMContentLoaded', function() {
         
         console.log('Saving event:', { method, url, eventData });
         
+        // Disable save button
+        const saveBtn = document.getElementById('saveEventBtn');
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+        
         fetch(url, {
             method: method,
             headers: { 'Content-Type': 'application/json' },
@@ -256,18 +230,61 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             console.log('Save response:', data);
             if (data.success) {
-                eventModal.hide();
-                calendar.refetchEvents();
-                alert('Event saved successfully!');
+                globalEventModal.hide();
+                // Use global calendar variable to refresh events
+                if (globalCalendar) {
+                    globalCalendar.refetchEvents();
+                }
+                showAlert('Event saved successfully!', 'success');
             } else {
-                alert(`Error: ${data.error}`);
+                showAlert(`Error: ${data.error}`, 'danger');
             }
         })
         .catch(error => {
             console.error('Save error:', error);
-            alert('Error saving event');
+            showAlert('Error saving event', 'danger');
+        })
+        .finally(() => {
+            // Re-enable save button
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save Event';
         });
     });
+    
+    function openEventModal(dateStr, event = null) {
+        console.log('Opening event modal:', { dateStr, event });
+        
+        if (event) {
+            document.getElementById('eventModalLabel').textContent = 'Edit Event';
+            document.getElementById('eventTitle').value = event.title || '';
+            document.getElementById('eventDescription').value = event.extendedProps?.description || '';
+            document.getElementById('eventId').value = event.id || '';
+            document.getElementById('eventUrl').value = event.extendedProps?.url || '';
+            
+            // Parse dates
+            const startDate = new Date(event.start);
+            const endDate = new Date(event.end || event.start);
+            
+            document.getElementById('eventStartDate').value = startDate.toISOString().split('T')[0];
+            document.getElementById('eventEndDate').value = endDate.toISOString().split('T')[0];
+            document.getElementById('eventStartTime').value = startDate.toTimeString().slice(0, 5);
+            document.getElementById('eventEndTime').value = endDate.toTimeString().slice(0, 5);
+        } else {
+            document.getElementById('eventModalLabel').textContent = 'New Event';
+            document.getElementById('eventForm').reset();
+            document.getElementById('eventId').value = '';
+            document.getElementById('eventUrl').value = '';
+            
+            if (dateStr) {
+                document.getElementById('eventStartDate').value = dateStr;
+                document.getElementById('eventEndDate').value = dateStr;
+                document.getElementById('eventStartTime').value = '09:00';
+                document.getElementById('eventEndTime').value = '10:00';
+            }
+        }
+        
+        globalEventModal.show();
+    }
     
     function loadCalendarList() {
         console.log('Loading calendar list...');
@@ -280,7 +297,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     let html = '';
                     data.calendars.forEach((cal, index) => {
                         const calName = Array.isArray(cal) ? cal[0] : cal;
-                        html += `<div class="mb-1">${calName}</div>`;
+                        html += `<div class="mb-1">📅 ${calName}</div>`;
                     });
                     calendarListEl.innerHTML = html;
                 } else {
@@ -293,14 +310,42 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
     
+    function showAlert(message, type) {
+        // Create alert element
+        const alert = document.createElement('div');
+        alert.className = `alert alert-${type} alert-dismissible fade show`;
+        alert.style.position = 'fixed';
+        alert.style.top = '20px';
+        alert.style.right = '20px';
+        alert.style.zIndex = '9999';
+        alert.style.minWidth = '300px';
+        alert.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>
+        `;
+        
+        document.body.appendChild(alert);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (alert.parentElement) {
+                alert.remove();
+            }
+        }, 5000);
+    }
+    
     // Global functions
     window.refreshEvents = function() {
         console.log('Refreshing events...');
-        calendar.refetchEvents();
+        if (globalCalendar) {
+            globalCalendar.refetchEvents();
+        }
     };
     
-    // Make openEventModal global for debugging
+    // Make functions globally available
     window.openEventModal = openEventModal;
+    window.loadCalendarList = loadCalendarList;
+    window.showAlert = showAlert;
 });
 
 console.log('Calendar script loaded');
