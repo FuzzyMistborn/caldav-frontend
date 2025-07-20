@@ -182,11 +182,7 @@
 
 {% block scripts %}
 <script>
-console.log('=== JAVASCRIPT STARTING ===');
-
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('=== DOM CONTENT LOADED ===');
-    
     const calendarEl = document.getElementById('calendar');
     const calendarListEl = document.getElementById('calendarList');
     const eventModal = new bootstrap.Modal(document.getElementById('eventModal'));
@@ -370,11 +366,9 @@ document.addEventListener('DOMContentLoaded', function() {
     loadSettings();
 
     function loadSettings() {
-        console.log('loadSettings called');
         fetch('/api/settings')
             .then(response => response.json())
             .then(data => {
-                console.log('Settings data:', data);
                 userSettings = data;
                 calendar.setOption('firstDay', data.week_start || 0);
                 document.getElementById('weekStart').value = data.week_start || 0;
@@ -389,43 +383,33 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function loadCalendarList() {
-        console.log('loadCalendarList called');
-        
         calendarListEl.innerHTML = '<div class="text-info">Loading calendars...</div>';
         
         fetch('/api/calendar-selection')
             .then(response => {
-                console.log('Calendar selection response status:', response.status);
-                
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
-                
                 return response.json();
             })
             .then(data => {
-                console.log('Calendar selection data:', data);
-                
                 if (data.error) {
-                    console.error('API returned error:', data.error);
                     calendarListEl.innerHTML = `<div class="text-danger">API Error: ${data.error}</div>`;
                     return;
                 }
                 
                 if (data.calendars && Array.isArray(data.calendars)) {
-                    console.log('Found calendars:', data.calendars.length);
                     userSettings.calendar_colors = data.calendar_colors || {};
                     updateCalendarSidebar(data.calendars, data.selected_calendars || []);
                     updateColorSettings(data.calendars);
                     updateEventCalendarSelector(data.calendars);
                 } else {
-                    console.warn('No calendars array found in response:', data);
                     calendarListEl.innerHTML = '<div class="text-warning">No calendars found in response</div>';
                 }
             })
             .catch(error => {
                 console.error('Error loading calendar list:', error);
-                calendarListEl.innerHTML = `<div class="text-danger">Network Error: ${error.message}<br><small>Check browser console for details</small></div>`;
+                calendarListEl.innerHTML = `<div class="text-danger">Network Error: ${error.message}</div>`;
             });
     }
 
@@ -434,15 +418,11 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updateCalendarSidebar(calendars, selectedCalendars) {
-        console.log('updateCalendarSidebar called with:', { calendars, selectedCalendars });
-        
         let html = '';
         calendars.forEach((calInfo, index) => {
             const calName = Array.isArray(calInfo) ? calInfo[0] : calInfo;
             const color = getCalendarColor(calName, index);
             const isSelected = selectedCalendars.includes(calName);
-            
-            console.log(`Calendar ${index}:`, { calName, color, isSelected });
             
             html += `
                 <div class="form-check mb-2">
@@ -524,8 +504,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updateEventCalendarSelector(calendars) {
-        console.log('updateEventCalendarSelector called with:', calendars);
-        
         const selector = document.getElementById('eventCalendar');
         const defaultSelector = document.getElementById('defaultCalendar');
         
@@ -537,7 +515,6 @@ document.addEventListener('DOMContentLoaded', function() {
         selector.innerHTML = '';
         calendars.forEach((calInfo) => {
             const calName = Array.isArray(calInfo) ? calInfo[0] : calInfo;
-            console.log('Adding calendar option:', calName);
             
             const option = document.createElement('option');
             option.value = calName;
@@ -557,9 +534,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (userSettings.default_calendar) {
             defaultSelector.value = userSettings.default_calendar;
         }
-        
-        console.log('Event calendar selector updated. Options count:', selector.options.length);
-        console.log('Default calendar selector updated. Options count:', defaultSelector.options.length);
     }
 
     function updateCalendarSelection() {
