@@ -519,13 +519,31 @@ document.addEventListener('DOMContentLoaded', function() {
             selectionEnd = null;
             furthestDate = null;
         } else if (isTimeSelecting) {
-            // Time grid selection end
-            if (timeSelectionStart && timeSelectionEnd) {
+            // Calculate the final end time from the current mouse position
+            const currentView = calendar.view;
+            let finalTimeSelectionEnd = timeSelectionEnd;
+            
+            // Get final time from mouse position at release
+            if (currentView.type === 'timeGridDay') {
+                const dayDate = currentView.currentStart.toISOString().split('T')[0];
+                const timeInfo = getTimeFromPosition(e, currentView);
+                if (timeInfo) {
+                    finalTimeSelectionEnd = {
+                        date: dayDate,
+                        time: timeInfo.time,
+                        datetime: timeInfo.datetime
+                    };
+                }
+            }
+            
+            console.log('Final time selection - Start:', timeSelectionStart?.time, 'End:', finalTimeSelectionEnd?.time);
+            
+            if (timeSelectionStart && finalTimeSelectionEnd) {
                 // Create date-time objects
                 const startDate = timeSelectionStart.date;
-                const endDate = timeSelectionEnd.date;
+                const endDate = finalTimeSelectionEnd.date;
                 const startTime = timeSelectionStart.time;
-                const endTime = timeSelectionEnd.time;
+                const endTime = finalTimeSelectionEnd.time;
                 
                 // Ensure end time is after start time (add 1 hour minimum if same time)
                 let startDateTime = new Date(`${startDate}T${startTime}`);
