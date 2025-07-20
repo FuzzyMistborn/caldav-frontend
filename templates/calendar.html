@@ -307,28 +307,58 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('Event modal element:', document.getElementById('eventModal'));
     console.log('Bootstrap modal object:', eventModal);
     
-    // Multi-day selection handling
+    // Multi-day selection handling for day grid
     let isSelecting = false;
     let selectionStart = null;
     let selectionEnd = null;
     let furthestDate = null; // Track the furthest date we've reached
     
-    // Custom drag selection implementation
+    // Time-based selection handling for time grid
+    let isTimeSelecting = false;
+    let timeSelectionStart = null;
+    let timeSelectionEnd = null;
+    
+    // Custom drag selection implementation for day grid
     calendarEl.addEventListener('mousedown', function(e) {
         const dayEl = e.target.closest('.fc-daygrid-day');
-        if (dayEl && e.button === 0) { // Left mouse button
+        const timeEl = e.target.closest('.fc-timegrid-slot');
+        
+        if (dayEl && e.button === 0) {
+            // Day grid selection
             isSelecting = true;
             selectionStart = dayEl.getAttribute('data-date');
             selectionEnd = selectionStart;
             furthestDate = selectionStart;
-            e.preventDefault(); // Prevent text selection
-            
+            e.preventDefault();
             dayEl.classList.add('selecting');
+        } else if (timeEl && e.button === 0) {
+            // Time grid selection
+            const currentView = calendar.view;
+            if (currentView.type === 'timeGridDay' || currentView.type === 'timeGridWeek') {
+                isTimeSelecting = true;
+                
+                // Get the time slot information
+                const slotTime = timeEl.getAttribute('data-time');
+                const dayEl = timeEl.closest('.fc-timegrid-col');
+                const dayDate = dayEl ? dayEl.getAttribute('data-date') : null;
+                
+                if (slotTime && dayDate) {
+                    timeSelectionStart = {
+                        date: dayDate,
+                        time: slotTime,
+                        element: timeEl
+                    };
+                    timeSelectionEnd = timeSelectionStart;
+                    e.preventDefault();
+                    timeEl.classList.add('time-selecting');
+                }
+            }
         }
     });
     
     calendarEl.addEventListener('mousemove', function(e) {
         if (isSelecting) {
+            // Day grid selection logic (existing)
             const dayEl = e.target.closest('.fc-daygrid-day');
             if (dayEl) {
                 const currentDate = dayEl.getAttribute('data-date');
@@ -337,16 +367,31 @@ document.addEventListener('DOMContentLoaded', function() {
                     const startDateObj = new Date(selectionStart);
                     const furthestDateObj = new Date(furthestDate);
                     
-                    // Calculate distance from start for current and furthest
                     const currentDistance = Math.abs(currentDateObj - startDateObj);
                     const furthestDistance = Math.abs(furthestDateObj - startDateObj);
                     
-                    // Only update if this is further from start than our previous furthest
                     if (currentDistance >= furthestDistance) {
                         furthestDate = currentDate;
                         selectionEnd = currentDate;
                         updateSelectionVisual();
                     }
+                }
+            }
+        } else if (isTimeSelecting) {
+            // Time grid selection logic
+            const timeEl = e.target.closest('.fc-timegrid-slot');
+            if (timeEl) {
+                const slotTime = timeEl.getAttribute('data-time');
+                const dayEl = timeEl.closest('.fc-timegrid-col');
+                const dayDate = dayEl ? dayEl.getAttribute('data-date') : null;
+                
+                if (slotTime && dayDate) {
+                    timeSelectionEnd = {
+                        date: dayDate,
+                        time: slotTime,
+                        element: timeEl
+                    };
+                    updateTimeSelectionVisual();
                 }
             }
         }
@@ -359,13 +404,11 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         
         if (selectionStart && selectionEnd) {
-            // Add visual feedback for current selection
             const startDateObj = new Date(selectionStart);
             const endDateObj = new Date(selectionEnd);
             const actualStart = startDateObj <= endDateObj ? startDateObj : endDateObj;
             const actualEnd = startDateObj <= endDateObj ? endDateObj : startDateObj;
             
-            // Highlight the range
             document.querySelectorAll('.fc-daygrid-day').forEach(dayEl => {
                 const dayDate = new Date(dayEl.getAttribute('data-date'));
                 if (dayDate >= actualStart && dayDate <= actualEnd) {
@@ -375,12 +418,41 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    function updateTimeSelectionVisual() {
+        // Remove previous time selection classes
+        document.querySelectorAll('.fc-timegrid-slot.time-selecting').forEach(el => {
+            el.classList.remove('time-selecting');
+        });
+        
+        if (timeSelectionStart && timeSelectionEnd) {
+            // Create date-time objects for comparison
+            const startDateTime = new Date(`${timeSelectionStart.date}T${timeSelectionStart.time}`);
+            const endDateTime = new Date(`${timeSelectionEnd.date}T${timeSelectionEnd.time}`);
+            
+            const actualStart = startDateTime <= endDateTime ? startDateTime : endDateTime;
+            const actualEnd = startDateTime <= endDateTime ? endDateTime : startDateTime;
+            
+            // Highlight all time slots in the range
+            document.querySelectorAll('.fc-timegrid-slot').forEach(slotEl => {
+                const slotTime = slotEl.getAttribute('data-time');
+                const dayEl = slotEl.closest('.fc-timegrid-col');
+                const dayDate = dayEl ? dayEl.getAttribute('data-date') : null;
+                
+                if (slotTime && dayDate) {
+                    const slotDateTime = new Date(`${dayDate}T${slotTime}`);
+                    if (slotDateTime >= actualStart && slotDateTime <= actualEnd) {
+                        slotEl.classList.add('time-selecting');
+                    }
+                }
+            });
+        }
+    }
+    
     calendarEl.addEventListener('mouseup', function(e) {
         if (isSelecting) {
-            // Use the furthest date as the final selection
+            // Day grid selection end (existing logic)
             const finalEnd = furthestDate || selectionStart;
             
-            // Remove visual feedback
             document.querySelectorAll('.fc-daygrid-day.selecting').forEach(el => {
                 el.classList.remove('selecting');
             });
@@ -388,11 +460,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (selectionStart && finalEnd) {
                 const startDate = new Date(selectionStart);
                 const endDate = new Date(finalEnd);
-                
-                // Ensure start is before end
                 const actualStart = startDate <= endDate ? startDate : endDate;
                 const actualEnd = startDate <= endDate ? endDate : startDate;
-                
                 const isMultiDay = selectionStart !== finalEnd;
                 
                 openEventModal(null, null, {
@@ -406,21 +475,63 @@ document.addEventListener('DOMContentLoaded', function() {
             selectionStart = null;
             selectionEnd = null;
             furthestDate = null;
+        } else if (isTimeSelecting) {
+            // Time grid selection end
+            document.querySelectorAll('.fc-timegrid-slot.time-selecting').forEach(el => {
+                el.classList.remove('time-selecting');
+            });
+            
+            if (timeSelectionStart && timeSelectionEnd) {
+                // Create date-time objects
+                const startDateTime = new Date(`${timeSelectionStart.date}T${timeSelectionStart.time}`);
+                const endDateTime = new Date(`${timeSelectionEnd.date}T${timeSelectionEnd.time}`);
+                
+                const actualStart = startDateTime <= endDateTime ? startDateTime : endDateTime;
+                const actualEnd = startDateTime <= endDateTime ? endDateTime : startDateTime;
+                
+                // Extract date and time components
+                const startDate = actualStart.toISOString().split('T')[0];
+                const endDate = actualEnd.toISOString().split('T')[0];
+                const startTime = actualStart.toTimeString().slice(0, 5);
+                const endTime = actualEnd.toTimeString().slice(0, 5);
+                
+                const isMultiDay = startDate !== endDate;
+                
+                openEventModal(null, null, {
+                    startDate: startDate,
+                    endDate: endDate,
+                    startTime: startTime,
+                    endTime: endTime,
+                    isMultiDay: isMultiDay,
+                    isTimed: true
+                });
+            }
+            
+            isTimeSelecting = false;
+            timeSelectionStart = null;
+            timeSelectionEnd = null;
         }
     });
     
     // Handle mouseup outside calendar
     document.addEventListener('mouseup', function(e) {
         if (isSelecting) {
-            // Remove visual feedback
             document.querySelectorAll('.fc-daygrid-day.selecting').forEach(el => {
                 el.classList.remove('selecting');
             });
-            
             isSelecting = false;
             selectionStart = null;
             selectionEnd = null;
             furthestDate = null;
+        }
+        
+        if (isTimeSelecting) {
+            document.querySelectorAll('.fc-timegrid-slot.time-selecting').forEach(el => {
+                el.classList.remove('time-selecting');
+            });
+            isTimeSelecting = false;
+            timeSelectionStart = null;
+            timeSelectionEnd = null;
         }
     });
     
