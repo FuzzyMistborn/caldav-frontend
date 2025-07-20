@@ -529,24 +529,29 @@ def api_create_event():
         app.logger.error(f"Invalid date format: {e}")
         return jsonify({'error': 'Invalid date format'}), 400
     
-    # Get user preferences to find available calendars
+    # Get user preferences to find available calendars and default
     user_prefs = UserPreferences.query.get(session['user_id'])
     if not user_prefs:
         return jsonify({'error': 'User preferences not found'}), 404
     
-    # Determine target calendar
+    # Determine target calendar with improved logic
     target_calendar = data.get('calendar_name')
     if not target_calendar:
-        selected_calendars = user_prefs.get_selected_calendars()
-        if not selected_calendars:
-            # If no selected calendars, try to get first available calendar
-            available_calendars = [(cal.calendar_name, cal.calendar_url) for cal in user_prefs.calendars]
-            if available_calendars:
-                target_calendar = available_calendars[0][0]
-            else:
-                return jsonify({'error': 'No calendars available'}), 400
+        # First try user's default calendar
+        if user_prefs.default_calendar:
+            target_calendar = user_prefs.default_calendar
         else:
-            target_calendar = selected_calendars[0]
+            # Fall back to first selected calendar
+            selected_calendars = user_prefs.get_selected_calendars()
+            if not selected_calendars:
+                # If no selected calendars, try to get first available calendar
+                available_calendars = [(cal.calendar_name, cal.calendar_url) for cal in user_prefs.calendars]
+                if available_calendars:
+                    target_calendar = available_calendars[0][0]
+                else:
+                    return jsonify({'error': 'No calendars available'}), 400
+            else:
+                target_calendar = selected_calendars[0]
     
     app.logger.info(f"Target calendar: {target_calendar}")
     
@@ -594,6 +599,7 @@ def get_settings():
     return jsonify({
         'week_start': user_prefs.week_start,
         'calendar_colors': user_prefs.get_calendar_colors(),
+        'default_calendar': user_prefs.default_calendar,  # Add this line
         'default_view': user_prefs.default_view,
         'timezone': user_prefs.timezone
     })
@@ -616,6 +622,9 @@ def update_settings():
     
     if 'calendar_colors' in data:
         user_prefs.set_calendar_colors(data['calendar_colors'])
+    
+    if 'default_calendar' in data:  # Add this block
+        user_prefs.default_calendar = data['default_calendar']
     
     if 'default_view' in data:
         user_prefs.default_view = data['default_view']

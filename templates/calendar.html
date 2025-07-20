@@ -69,6 +69,17 @@
                     </select>
                     <small class="form-text mt-1 d-block">Choose which day your week starts on</small>
                 </div>
+
+                <!-- Default Calendar Setting -->
+                <div class="week-start-setting">
+                    <label for="defaultCalendar" class="form-label">
+                        <i class="fas fa-calendar-plus me-2"></i>Default Calendar
+                    </label>
+                    <select class="form-select" id="defaultCalendar">
+                        <option value="">Select default calendar...</option>
+                    </select>
+                    <small class="form-text mt-1 d-block">Calendar to use by default when creating new events</small>
+                </div>
                 
                 <!-- Calendar Colors Section -->
                 <div class="mb-3">
@@ -190,6 +201,18 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         selectable: true,
         height: '80vh',
+        // Display all-day events at the top
+        dayMaxEvents: false,
+        dayMaxEventRows: false,
+        moreLinkClick: 'popover',
+        eventOrder: function(a, b) {
+            // All-day events first, then by start time
+            if (a.allDay && !b.allDay) return -1;
+            if (!a.allDay && b.allDay) return 1;
+            return a.start - b.start;
+        },
+        eventDisplay: 'block',
+        displayEventTime: true,
         events: function(fetchInfo, successCallback, failureCallback) {
             fetch(`/api/events?start=${fetchInfo.startStr}&end=${fetchInfo.endStr}`)
                 .then(response => response.json())
@@ -197,7 +220,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (data.error) {
                         failureCallback(data.error);
                     } else {
-                        // Remove URLs from events to prevent .ics downloads
+                        // Remove URLs from events to prevent .ics downloads and format all-day events
                         const cleanEvents = data.map(event => {
                             const cleanEvent = { ...event };
                             // Store the URL in extendedProps but remove it from the event object
@@ -206,6 +229,27 @@ document.addEventListener('DOMContentLoaded', function() {
                                 cleanEvent.extendedProps.caldavUrl = cleanEvent.url;
                                 delete cleanEvent.url; // Remove URL to prevent download
                             }
+                            
+                            // Handle all-day events properly
+                            const startDate = new Date(cleanEvent.start);
+                            const endDate = new Date(cleanEvent.end);
+                            
+                            // Check if this is an all-day event
+                            const isAllDay = (startDate.getHours() === 0 && startDate.getMinutes() === 0 && 
+                                            endDate.getHours() === 23 && endDate.getMinutes() === 59) ||
+                                           (startDate.getHours() === 0 && startDate.getMinutes() === 0 && 
+                                            endDate.getHours() === 0 && endDate.getMinutes() === 0);
+                            
+                            if (isAllDay) {
+                                cleanEvent.allDay = true;
+                                cleanEvent.display = 'background';
+                                cleanEvent.classNames = ['all-day-event'];
+                                // For all-day events, set end date to next day for proper display
+                                const nextDay = new Date(endDate);
+                                nextDay.setDate(nextDay.getDate() + 1);
+                                cleanEvent.end = nextDay.toISOString().split('T')[0];
+                            }
+                            
                             return cleanEvent;
                         });
                         successCallback(cleanEvents);
@@ -238,6 +282,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 userSettings = data;
                 calendar.setOption('firstDay', data.week_start || 0);
                 document.getElementById('weekStart').value = data.week_start || 0;
+                
+                // Set default calendar if available
+                if (data.default_calendar) {
+                    document.getElementById('defaultCalendar').value = data.default_calendar;
+                }
             })
             .catch(error => {
                 console.error('Error loading settings:', error);
@@ -350,6 +399,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function updateEventCalendarSelector(calendars) {
         const selector = document.getElementById('eventCalendar');
+        const defaultSelector = document.getElementById('defaultCalendar');
+        
+        // Update event calendar selector
         selector.innerHTML = '';
         calendars.forEach((calInfo) => {
             const calName = Array.isArray(calInfo) ? calInfo[0] : calInfo;
@@ -358,6 +410,21 @@ document.addEventListener('DOMContentLoaded', function() {
             option.textContent = calName;
             selector.appendChild(option);
         });
+        
+        // Update default calendar selector
+        defaultSelector.innerHTML = '<option value="">Select default calendar...</option>';
+        calendars.forEach((calInfo) => {
+            const calName = Array.isArray(calInfo) ? calInfo[0] : calInfo;
+            const option = document.createElement('option');
+            option.value = calName;
+            option.textContent = calName;
+            defaultSelector.appendChild(option);
+        });
+        
+        // Set default calendar value if it exists in settings
+        if (userSettings.default_calendar) {
+            defaultSelector.value = userSettings.default_calendar;
+        }
     }
 
     function updateCalendarSelection() {
@@ -439,9 +506,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('eventEndTime').value = '10:00';
             }
             
-            // Set default calendar to first selected one
-            const calendarSelector = document.getElementById('eventCalendar');
-            if (calendarSelector.options.length > 0) {
+            // Set default calendar
+            const defaultCalendar = userSettings.default_calendar || 
+                                  document.getElementById('defaultCalendar').value;
+            if (defaultCalendar) {
+                document.getElementById('eventCalendar').value = defaultCalendar;
+            } else if (calendarSelector.options.length > 0) {
                 calendarSelector.selectedIndex = 0;
             }
         }
@@ -475,18 +545,21 @@ document.addEventListener('DOMContentLoaded', function() {
     // Save settings
     document.getElementById('saveSettingsBtn').addEventListener('click', function() {
         const weekStart = parseInt(document.getElementById('weekStart').value);
+        const defaultCalendar = document.getElementById('defaultCalendar').value;
         
         fetch('/api/settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 week_start: weekStart,
+                default_calendar: defaultCalendar,
                 calendar_colors: userSettings.calendar_colors
             })
         })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
+                userSettings.default_calendar = defaultCalendar;
                 calendar.setOption('firstDay', weekStart);
                 settingsModal.hide();
                 calendar.refetchEvents();

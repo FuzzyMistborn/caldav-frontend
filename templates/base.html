@@ -250,6 +250,59 @@
         .bulk-actions .btn:hover {
             transform: translateY(-1px);
         }
+
+        /* All-day event styling */
+        .fc-event.all-day-event {
+            opacity: 0.8;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+
+        .fc-event.all-day-event .fc-event-title {
+            font-size: 0.85em;
+            padding: 2px 4px;
+        }
+
+        /* Ensure all-day events appear at the top in day view */
+        .fc-timegrid .fc-event.all-day-event {
+            position: relative;
+            z-index: 10;
+        }
+
+        /* All-day event section in day/week views */
+        .fc-timegrid .fc-daygrid-body {
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 4px;
+        }
+
+        /* Better contrast for all-day events */
+        .fc-event.all-day-event:hover {
+            opacity: 1;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        /* All-day event indicator */
+        .fc-event.all-day-event::before {
+            content: '📅';
+            margin-right: 4px;
+            font-size: 0.8em;
+        }
+
+        /* Responsive all-day events */
+        @media (max-width: 768px) {
+            .fc-event.all-day-event .fc-event-title {
+                font-size: 0.75em;
+                padding: 1px 3px;
+            }
+            
+            .fc-event.all-day-event::before {
+                content: '';
+                margin-right: 0;
+            }
+        }
     </style>
 </head>
 <body>

@@ -22,6 +22,7 @@ class UserPreferences(db.Model):
     # Calendar settings
     selected_calendars = db.Column(db.Text)  # JSON array
     calendar_colors = db.Column(db.Text)     # JSON object
+    default_calendar = db.Column(db.String(255))  # Default calendar for new events
     week_start = db.Column(db.Integer, default=0)  # 0=Sunday, 1=Monday
     
     # UI preferences
@@ -73,6 +74,7 @@ class UserPreferences(db.Model):
             'server_type': self.server_type,
             'selected_calendars': self.get_selected_calendars(),
             'calendar_colors': self.get_calendar_colors(),
+            'default_calendar': self.default_calendar,
             'week_start': self.week_start,
             'default_view': self.default_view,
             'timezone': self.timezone,
