@@ -27,4 +27,6 @@ steps:
         - failure
 
 when:
-  event: manual
+  - event: manual
+  - event: push
+    branch: main

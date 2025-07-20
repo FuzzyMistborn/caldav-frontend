@@ -299,6 +299,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let isSelecting = false;
     let selectionStart = null;
     let selectionEnd = null;
+    let furthestDate = null; // Track the furthest date we've reached
     
     // Use event delegation for better performance and reliability
     calendarEl.addEventListener('mousedown', function(e) {
@@ -308,6 +309,7 @@ document.addEventListener('DOMContentLoaded', function() {
             isSelecting = true;
             selectionStart = dayEl.getAttribute('data-date');
             selectionEnd = selectionStart; // Initialize end with start
+            furthestDate = selectionStart; // Track furthest reached
             console.log('Selection started:', selectionStart);
             e.preventDefault(); // Prevent text selection
             
@@ -316,54 +318,78 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Use mouseenter for more reliable day detection
-    calendarEl.addEventListener('mouseenter', function(e) {
-        if (isSelecting && e.target.matches('.fc-daygrid-day')) {
-            const currentDate = e.target.getAttribute('data-date');
-            if (currentDate) {
-                selectionEnd = currentDate;
-                console.log('Selection entered day:', currentDate);
-                
-                // Remove previous selection classes
-                document.querySelectorAll('.fc-daygrid-day.selecting').forEach(el => {
-                    el.classList.remove('selecting');
-                });
-                
-                // Add visual feedback for current selection
-                const startDateObj = new Date(selectionStart);
-                const endDateObj = new Date(currentDate);
-                const actualStart = startDateObj <= endDateObj ? startDateObj : endDateObj;
-                const actualEnd = startDateObj <= endDateObj ? endDateObj : startDateObj;
-                
-                // Highlight the range
-                document.querySelectorAll('.fc-daygrid-day').forEach(dayEl => {
-                    const dayDate = new Date(dayEl.getAttribute('data-date'));
-                    if (dayDate >= actualStart && dayDate <= actualEnd) {
-                        dayEl.classList.add('selecting');
+    // Use mousemove instead of mouseenter for better tracking
+    calendarEl.addEventListener('mousemove', function(e) {
+        if (isSelecting) {
+            const dayEl = e.target.closest('.fc-daygrid-day');
+            if (dayEl) {
+                const currentDate = dayEl.getAttribute('data-date');
+                if (currentDate && currentDate !== selectionEnd) {
+                    const currentDateObj = new Date(currentDate);
+                    const startDateObj = new Date(selectionStart);
+                    const furthestDateObj = new Date(furthestDate);
+                    
+                    // Calculate distance from start for current and furthest
+                    const currentDistance = Math.abs(currentDateObj - startDateObj);
+                    const furthestDistance = Math.abs(furthestDateObj - startDateObj);
+                    
+                    // Only update if this is further from start than our previous furthest
+                    if (currentDistance >= furthestDistance) {
+                        furthestDate = currentDate;
+                        selectionEnd = currentDate;
+                        console.log('Selection moved to:', currentDate, '(distance:', currentDistance, ')');
+                        
+                        // Update visual feedback
+                        updateSelectionVisual();
                     }
-                });
+                }
             }
         }
-    }, true); // Use capture phase
+    });
+    
+    function updateSelectionVisual() {
+        // Remove previous selection classes
+        document.querySelectorAll('.fc-daygrid-day.selecting').forEach(el => {
+            el.classList.remove('selecting');
+        });
+        
+        if (selectionStart && selectionEnd) {
+            // Add visual feedback for current selection
+            const startDateObj = new Date(selectionStart);
+            const endDateObj = new Date(selectionEnd);
+            const actualStart = startDateObj <= endDateObj ? startDateObj : endDateObj;
+            const actualEnd = startDateObj <= endDateObj ? endDateObj : startDateObj;
+            
+            // Highlight the range
+            document.querySelectorAll('.fc-daygrid-day').forEach(dayEl => {
+                const dayDate = new Date(dayEl.getAttribute('data-date'));
+                if (dayDate >= actualStart && dayDate <= actualEnd) {
+                    dayEl.classList.add('selecting');
+                }
+            });
+        }
+    }
     
     calendarEl.addEventListener('mouseup', function(e) {
         if (isSelecting) {
-            console.log('Selection ended:', selectionEnd, '(tracked during drag)');
+            // Use the furthest date as the final selection
+            const finalEnd = furthestDate || selectionStart;
+            console.log('Selection ended:', finalEnd, '(using furthest reached date)');
             
             // Remove visual feedback
             document.querySelectorAll('.fc-daygrid-day.selecting').forEach(el => {
                 el.classList.remove('selecting');
             });
             
-            if (selectionStart && selectionEnd) {
+            if (selectionStart && finalEnd) {
                 const startDate = new Date(selectionStart);
-                const endDate = new Date(selectionEnd);
+                const endDate = new Date(finalEnd);
                 
                 // Ensure start is before end
                 const actualStart = startDate <= endDate ? startDate : endDate;
                 const actualEnd = startDate <= endDate ? endDate : startDate;
                 
-                const isMultiDay = selectionStart !== selectionEnd;
+                const isMultiDay = selectionStart !== finalEnd;
                 
                 console.log('Opening modal for drag selection:', {
                     start: actualStart.toISOString().split('T')[0],
@@ -381,6 +407,7 @@ document.addEventListener('DOMContentLoaded', function() {
             isSelecting = false;
             selectionStart = null;
             selectionEnd = null;
+            furthestDate = null;
         }
     });
     
@@ -397,6 +424,7 @@ document.addEventListener('DOMContentLoaded', function() {
             isSelecting = false;
             selectionStart = null;
             selectionEnd = null;
+            furthestDate = null;
         }
     });
     
