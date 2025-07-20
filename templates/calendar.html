@@ -298,6 +298,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add additional debugging for selection
     let isSelecting = false;
     let selectionStart = null;
+    let lastHoveredDate = null;
     
     // Add mouse event listeners as fallback for multi-day selection
     calendarEl.addEventListener('mousedown', function(e) {
@@ -306,6 +307,7 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('Mouse down on day element');
             isSelecting = true;
             selectionStart = dayEl.getAttribute('data-date');
+            lastHoveredDate = selectionStart; // Initialize with start date
             console.log('Selection started:', selectionStart);
             e.preventDefault(); // Prevent text selection
         }
@@ -316,44 +318,46 @@ document.addEventListener('DOMContentLoaded', function() {
             const dayEl = e.target.closest('.fc-daygrid-day');
             if (dayEl) {
                 const currentDate = dayEl.getAttribute('data-date');
-                console.log('Selection dragging over:', currentDate);
+                if (currentDate) {
+                    lastHoveredDate = currentDate; // Track the last valid date we hovered over
+                    console.log('Selection dragging over:', currentDate);
+                }
             }
         }
     });
     
     calendarEl.addEventListener('mouseup', function(e) {
         if (isSelecting) {
-            const dayEl = e.target.closest('.fc-daygrid-day');
-            if (dayEl) {
-                const selectionEnd = dayEl.getAttribute('data-date');
-                console.log('Selection ended:', selectionEnd);
+            // Use the last hovered date as the end date
+            const selectionEnd = lastHoveredDate || selectionStart;
+            console.log('Selection ended:', selectionEnd, '(using lastHoveredDate)');
+            
+            if (selectionStart) {
+                const startDate = new Date(selectionStart);
+                const endDate = new Date(selectionEnd);
                 
-                if (selectionStart) {
-                    // Always open modal, even for single day selection via drag
-                    const startDate = new Date(selectionStart);
-                    const endDate = new Date(selectionEnd);
-                    
-                    // Ensure start is before end
-                    const actualStart = startDate <= endDate ? startDate : endDate;
-                    const actualEnd = startDate <= endDate ? endDate : startDate;
-                    
-                    const isMultiDay = selectionStart !== selectionEnd;
-                    
-                    console.log('Opening modal for drag selection:', {
-                        start: actualStart.toISOString().split('T')[0],
-                        end: actualEnd.toISOString().split('T')[0],
-                        isMultiDay: isMultiDay
-                    });
-                    
-                    openEventModal(null, null, {
-                        startDate: actualStart.toISOString().split('T')[0],
-                        endDate: actualEnd.toISOString().split('T')[0],
-                        isMultiDay: isMultiDay
-                    });
-                }
+                // Ensure start is before end
+                const actualStart = startDate <= endDate ? startDate : endDate;
+                const actualEnd = startDate <= endDate ? endDate : startDate;
+                
+                const isMultiDay = selectionStart !== selectionEnd;
+                
+                console.log('Opening modal for drag selection:', {
+                    start: actualStart.toISOString().split('T')[0],
+                    end: actualEnd.toISOString().split('T')[0],
+                    isMultiDay: isMultiDay
+                });
+                
+                openEventModal(null, null, {
+                    startDate: actualStart.toISOString().split('T')[0],
+                    endDate: actualEnd.toISOString().split('T')[0],
+                    isMultiDay: isMultiDay
+                });
             }
+            
             isSelecting = false;
             selectionStart = null;
+            lastHoveredDate = null;
         }
     });
     
@@ -363,6 +367,7 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('Mouse up outside calendar, ending selection');
             isSelecting = false;
             selectionStart = null;
+            lastHoveredDate = null;
         }
     });
     
@@ -608,13 +613,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     toggleTimeInputs(true);
                     showToast(`Creating multi-day event from ${dateRange.startDate} to ${dateRange.endDate}`, 'info');
                 } else {
-                    document.getElementById('allDayEvent').checked = false;
-                    document.getElementById('eventStartTime').value = '09:00';
-                    document.getElementById('eventEndTime').value = '10:00';
-                    toggleTimeInputs(false);
+                    // For single day drag selections, also default to all-day to distinguish from clicks
+                    document.getElementById('allDayEvent').checked = true;
+                    toggleTimeInputs(true);
                 }
             } else if (dateStr) {
-                // Single date click (legacy support)
+                // Single date click (legacy support) - this is from regular dateClick
                 console.log('Setting date from dateStr:', dateStr);
                 document.getElementById('eventStartDate').value = dateStr;
                 document.getElementById('eventEndDate').value = dateStr;
