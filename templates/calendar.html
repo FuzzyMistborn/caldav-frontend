@@ -1,30 +1,429 @@
-const currentDistance = Math.abs(currentDateObj - startDateObj);
-                    const furthestDistance = Math.abs(furthestDateObj - startDateObj);
-                    
-                    if (currentDistance >= furthestDistance) {
-                        furthestDate = currentDate;
-                        selectionEnd = currentDate;
-                        updateSelectionVisual();
+{% extends "base.html" %}
+
+{% block title %}Calendar - CalDAV Web Client{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4>Multi-Calendar View</h4>
+                <div class="btn-group">
+                    <a href="{{ url_for('select_calendar') }}" class="btn btn-outline-primary">Manage Calendars</a>
+                    <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#settingsModal">
+                        Settings
+                    </button>
+                    <button class="btn btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#calendarSidebar" id="sidebarToggle">
+                        Calendars
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Collapsible Sidebar -->
+                <div class="collapse mb-3" id="calendarSidebar">
+                    <div class="card card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6 class="mb-3">Active Calendars</h6>
+                                <div id="calendarList">Loading calendars...</div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="mb-3">Quick Actions</h6>
+                                <button class="btn btn-sm btn-outline-primary w-100 mb-2" onclick="refreshEvents()">
+                                    Refresh Events
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary w-100 mb-2" data-bs-toggle="modal" data-bs-target="#settingsModal">
+                                    Customize Colors
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Main Calendar -->
+                <div id="calendar" style="position: relative;">
+                    <div class="calendar-selection-hint" id="selectionHint">
+                        💡 Drag to select date/time ranges for events
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal fade" id="settingsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-cog me-2"></i>Calendar Settings
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body settings-modal-body">
+                <!-- Week Start Setting -->
+                <div class="week-start-setting">
+                    <label for="weekStart" class="form-label">
+                        <i class="fas fa-calendar-week me-2"></i>Week Starts On
+                    </label>
+                    <select class="form-select" id="weekStart">
+                        <option value="0">Sunday</option>
+                        <option value="1">Monday</option>
+                    </select>
+                    <small class="form-text mt-1 d-block">Choose which day your week starts on</small>
+                </div>
+
+                <!-- Default Calendar Setting -->
+                <div class="week-start-setting">
+                    <label for="defaultCalendar" class="form-label">
+                        <i class="fas fa-calendar-plus me-2"></i>Default Calendar
+                    </label>
+                    <select class="form-select" id="defaultCalendar">
+                        <option value="">Select default calendar...</option>
+                    </select>
+                    <small class="form-text mt-1 d-block">Calendar to use by default when creating new events</small>
+                </div>
+                
+                <!-- Calendar Colors Section -->
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <label class="form-label mb-0">
+                            <i class="fas fa-palette me-2"></i>Calendar Colors
+                        </label>
+                        <div class="btn-group btn-group-sm bulk-actions">
+                            <button type="button" class="btn btn-outline-secondary" onclick="resetAllColors()">
+                                <i class="fas fa-undo me-1"></i>Reset All
+                            </button>
+                            <button type="button" class="btn btn-outline-primary" onclick="randomizeColors()">
+                                <i class="fas fa-random me-1"></i>Randomize
+                            </button>
+                        </div>
+                    </div>
+                    <small class="text-muted mb-2 d-block">Customize the color for each calendar</small>
+                    <div id="colorSettings" class="color-settings-grid">
+                        <!-- Color settings will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Cancel
+                </button>
+                <button type="button" class="btn btn-primary" id="saveSettingsBtn">
+                    <i class="fas fa-save me-1"></i>Save Settings
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Event Modal -->
+<div class="modal fade" id="eventModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="eventModalLabel">New Event</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="eventForm">
+                    <div class="mb-3">
+                        <label for="eventCalendar" class="form-label">Calendar</label>
+                        <select class="form-select" id="eventCalendar"></select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="eventTitle" class="form-label">Title</label>
+                        <input type="text" class="form-control" id="eventTitle" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="eventDescription" class="form-label">Description</label>
+                        <textarea class="form-control" id="eventDescription" rows="3"></textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="eventStartDate" class="form-label">Start Date</label>
+                                <input type="date" class="form-control" id="eventStartDate" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="eventStartTime" class="form-label">Start Time</label>
+                                <input type="time" class="form-control" id="eventStartTime" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="eventEndDate" class="form-label">End Date</label>
+                                <input type="date" class="form-control" id="eventEndDate" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="eventEndTime" class="form-label">End Time</label>
+                                <input type="time" class="form-control" id="eventEndTime" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="allDayEvent">
+                        <label class="form-check-label" for="allDayEvent">All Day Event</label>
+                    </div>
+                    <input type="hidden" id="eventId">
+                    <input type="hidden" id="eventUrl">
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="deleteEventBtn" style="display: none;">Delete</button>
+                <button type="button" class="btn btn-primary" id="saveEventBtn">Save Event</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const calendarEl = document.getElementById('calendar');
+    const calendarListEl = document.getElementById('calendarList');
+    const eventModal = new bootstrap.Modal(document.getElementById('eventModal'));
+    const settingsModal = new bootstrap.Modal(document.getElementById('settingsModal'));
+    
+    let userSettings = { week_start: 0, calendar_colors: {} };
+    
+    const defaultCalendarColors = [
+        '#3788d8', '#28a745', '#dc3545', '#ffc107', '#6f42c1',
+        '#fd7e14', '#20c997', '#e83e8c', '#6c757d', '#17a2b8'
+    ];
+
+    const calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        firstDay: 0,
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,timeGridDay'
+        },
+        selectable: true,
+        selectMirror: true,
+        selectOverlap: true,
+        selectConstraint: null,
+        unselectAuto: true,
+        height: '80vh',
+        // Better all-day event display
+        dayMaxEvents: true,
+        dayMaxEventRows: 3,
+        moreLinkClick: 'popover',
+        eventOrder: function(a, b) {
+            // All-day events first, then by start time
+            if (a.allDay && !b.allDay) return -1;
+            if (!a.allDay && b.allDay) return 1;
+            return a.start - b.start;
+        },
+        eventDisplay: 'auto',
+        displayEventTime: true,
+        events: function(fetchInfo, successCallback, failureCallback) {
+            fetch(`/api/events?start=${fetchInfo.startStr}&end=${fetchInfo.endStr}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        failureCallback(data.error);
+                    } else {
+                        // Remove URLs from events to prevent .ics downloads and format all-day events
+                        const cleanEvents = data.map(event => {
+                            const cleanEvent = { ...event };
+                            // Store the URL in extendedProps but remove it from the event object
+                            if (cleanEvent.url) {
+                                cleanEvent.extendedProps = cleanEvent.extendedProps || {};
+                                cleanEvent.extendedProps.caldavUrl = cleanEvent.url;
+                                delete cleanEvent.url; // Remove URL to prevent download
+                            }
+                            
+                            // Handle all-day events properly
+                            const startDate = new Date(cleanEvent.start);
+                            const endDate = new Date(cleanEvent.end);
+                            
+                            // Check if this is an all-day event
+                            const isAllDay = (startDate.getHours() === 0 && startDate.getMinutes() === 0 && 
+                                            endDate.getHours() === 23 && endDate.getMinutes() === 59) ||
+                                           (startDate.getHours() === 0 && startDate.getMinutes() === 0 && 
+                                            endDate.getHours() === 0 && endDate.getMinutes() === 0);
+                            
+                            if (isAllDay) {
+                                cleanEvent.allDay = true;
+                                cleanEvent.classNames = ['all-day-event'];
+                                // For all-day events spanning multiple days, ensure proper end date
+                                if (startDate.toDateString() !== endDate.toDateString()) {
+                                    // Multi-day all-day event
+                                    cleanEvent.end = endDate.toISOString().split('T')[0];
+                                } else {
+                                    // Single day all-day event - don't set end to avoid issues
+                                    delete cleanEvent.end;
+                                }
+                            }
+                            
+                            return cleanEvent;
+                        });
+                        successCallback(cleanEvents);
                     }
-                }
-            }
-        } else if (isTimeSelecting) {
-            // Time grid selection logic
-            const currentView = calendar.view;
-            
-            // Find day date using same logic as mousedown
-            let dayDate = null;
-            
-            // For day view, use the current view date
-            if (currentView.type === 'timeGridDay') {
-                dayDate = currentView.currentStart.toISOString().split('T')[0];
+                })
+                .catch(error => {
+                    failureCallback(error);
+                });
+        },
+        dateClick: function(info) {
+            // Handle single day clicks with 30-minute rounding
+            if (info.view.type === 'timeGridDay' || info.view.type === 'timeGridWeek') {
+                // Time grid view - extract time from click and round to nearest 30 minutes
+                const clickTime = new Date(info.date);
+                
+                // Round to nearest 30 minutes
+                const minutes = clickTime.getMinutes();
+                const roundedMinutes = Math.round(minutes / 30) * 30;
+                
+                const startTime = new Date(clickTime);
+                startTime.setMinutes(roundedMinutes, 0, 0);
+                
+                // Default to 30-minute duration
+                const endTime = new Date(startTime.getTime() + 30 * 60 * 1000);
+                
+                openEventModal(null, null, {
+                    startDate: info.dateStr.split('T')[0],
+                    endDate: info.dateStr.split('T')[0],
+                    startTime: startTime.toTimeString().slice(0, 5),
+                    endTime: endTime.toTimeString().slice(0, 5),
+                    isMultiDay: false,
+                    isTimed: true
+                });
             } else {
-                // For week view, try to find the column
-                const col = e.target.closest('.fc-timegrid-col');
+                // Day grid view - regular day click
+                openEventModal(null, null, {
+                    startDate: info.dateStr,
+                    endDate: info.dateStr,
+                    isMultiDay: false
+                });
+            }
+        },
+        eventClick: function(info) {
+            // Prevent default action (downloading .ics file)
+            info.jsEvent.preventDefault();
+            openEventModal(null, info.event);
+        },
+        select: function(info) {
+            // Handle date range selection from FullCalendar's native selection with 30-minute rounding
+            const startDate = new Date(info.start);
+            const endDate = new Date(info.end);
+            
+            if (info.view.type === 'timeGridDay' || info.view.type === 'timeGridWeek') {
+                // Time grid view - handle time selection and round to nearest 30 minutes
+                const startMinutes = startDate.getMinutes();
+                const endMinutes = endDate.getMinutes();
+                
+                // Round start time to nearest 30 minutes (down)
+                const roundedStartMinutes = Math.floor(startMinutes / 30) * 30;
+                startDate.setMinutes(roundedStartMinutes, 0, 0);
+                
+                // Round end time to nearest 30 minutes (up)
+                const roundedEndMinutes = Math.ceil(endMinutes / 30) * 30;
+                if (roundedEndMinutes >= 60) {
+                    endDate.setHours(endDate.getHours() + 1);
+                    endDate.setMinutes(0, 0, 0);
+                } else {
+                    endDate.setMinutes(roundedEndMinutes, 0, 0);
+                }
+                
+                const startTime = startDate.toTimeString().slice(0, 5);
+                const endTime = endDate.toTimeString().slice(0, 5);
+                
+                openEventModal(null, null, {
+                    startDate: startDate.toISOString().split('T')[0],
+                    endDate: endDate.toISOString().split('T')[0],
+                    startTime: startTime,
+                    endTime: endTime,
+                    isMultiDay: startDate.toDateString() !== endDate.toDateString(),
+                    isTimed: true
+                });
+            } else {
+                // Day grid view - handle day selection
+                // Calculate the actual end date (FullCalendar's end is exclusive for day grid)
+                const actualEndDate = new Date(endDate);
+                actualEndDate.setDate(actualEndDate.getDate() - 1);
+                
+                const startDateStr = startDate.toISOString().split('T')[0];
+                const endDateStr = actualEndDate.toISOString().split('T')[0];
+                const isMultiDay = startDateStr !== endDateStr;
+                
+                openEventModal(null, null, {
+                    startDate: startDateStr,
+                    endDate: endDateStr,
+                    isMultiDay: isMultiDay
+                });
+            }
+            
+            // Hide selection hint
+            const hint = document.getElementById('selectionHint');
+            if (hint) {
+                hint.classList.remove('show');
+            }
+            
+            // Clear the selection
+            calendar.unselect();
+        },
+        selectAllow: function(selectInfo) {
+            // Show hint when user starts selecting
+            const hint = document.getElementById('selectionHint');
+            if (hint && selectInfo.start.getTime() !== selectInfo.end.getTime()) {
+                hint.classList.add('show');
+            }
+            return true; // Always allow selection
+        },
+        unselect: function(info) {
+            // Hide hint when selection is cleared
+            const hint = document.getElementById('selectionHint');
+            if (hint) {
+                hint.classList.remove('show');
+            }
+        },
+    });
+
+    calendar.render();
+    
+    // Multi-day selection handling for day grid
+    let isSelecting = false;
+    let selectionStart = null;
+    let selectionEnd = null;
+    let furthestDate = null; // Track the furthest date we've reached
+    
+    // Time-based selection handling for time grid
+    let isTimeSelecting = false;
+    let timeSelectionStart = null;
+    let timeSelectionEnd = null;
+    
+    // Custom drag selection implementation for day grid
+    calendarEl.addEventListener('mousedown', function(e) {
+        const dayEl = e.target.closest('.fc-daygrid-day');
+        const timeGridEl = e.target.closest('.fc-timegrid-col, .fc-timegrid-slot-lane, .fc-timegrid-slot, .fc-timegrid-col-frame');
+        
+        if (dayEl && e.button === 0 && !timeGridEl) {
+            // Day grid selection
+            isSelecting = true;
+            selectionStart = dayEl.getAttribute('data-date');
+            selectionEnd = selectionStart;
+            furthestDate = selectionStart;
+            e.preventDefault();
+            dayEl.classList.add('selecting');
+        } else if (timeGridEl && e.button === 0) {
+            // Time grid selection
+            const currentView = calendar.view;
+            if (currentView.type === 'timeGridDay' || currentView.type === 'timeGridWeek') {
+                isTimeSelecting = true;
+                
+                let col = e.target.closest('.fc-timegrid-col');
+                let dayDate = null;
+                
                 if (col) {
                     dayDate = col.getAttribute('data-date');
                 }
-                // Add other fallback methods if needed for week view
+                
                 if (!dayDate) {
                     const colIndex = Array.from(col?.parentElement?.children || []).indexOf(col);
                     const headerCells = document.querySelectorAll('.fc-col-header-cell');
@@ -32,187 +431,35 @@ const currentDistance = Math.abs(currentDateObj - startDateObj);
                         dayDate = headerCells[colIndex].getAttribute('data-date');
                     }
                 }
-            }
-            
-            if (dayDate) {
-                const timeInfo = getTimeFromPosition(e, currentView);
-                if (timeInfo) {
-                    timeSelectionEnd = {
-                        date: dayDate,
-                        time: timeInfo.time,
-                        datetime: timeInfo.datetime
-                    };
+                
+                if (!dayDate) {
+                    if (currentView.type === 'timeGridDay') {
+                        dayDate = currentView.currentStart.toISOString().split('T')[0];
+                    }
+                }
+                
+                if (dayDate) {
+                    const timeInfo = getTimeFromPosition(e, currentView);
+                    
+                    if (timeInfo) {
+                        timeSelectionStart = {
+                            date: dayDate,
+                            time: timeInfo.time,
+                            datetime: timeInfo.datetime,
+                            element: timeGridEl
+                        };
+                        timeSelectionEnd = timeSelectionStart;
+                        e.preventDefault();
+                    } else {
+                        isTimeSelecting = false;
+                    }
+                } else {
+                    isTimeSelecting = false;
                 }
             }
         }
     });
     
-    function updateSelectionVisual() {
-        // Remove previous selection classes
-        document.querySelectorAll('.fc-daygrid-day.selecting').forEach(el => {
-            el.classList.remove('selecting');
-        });
-        
-        if (selectionStart && selectionEnd) {
-            const startDateObj = new Date(selectionStart);
-            const endDateObj = new Date(selectionEnd);
-            const actualStart = startDateObj <= endDateObj ? startDateObj : endDateObj;
-            const actualEnd = startDateObj <= endDateObj ? endDateObj : startDateObj;
-            
-            document.querySelectorAll('.fc-daygrid-day').forEach(dayEl => {
-                const dayDate = new Date(dayEl.getAttribute('data-date'));
-                if (dayDate >= actualStart && dayDate <= actualEnd) {
-                    dayEl.classList.add('selecting');
-                }
-            });
-        }
-    }
-    
-    calendarEl.addEventListener('mouseup', function(e) {
-        if (isSelecting) {
-            // Day grid selection end
-            const finalEnd = furthestDate || selectionStart;
-            
-            document.querySelectorAll('.fc-daygrid-day.selecting').forEach(el => {
-                el.classList.remove('selecting');
-            });
-            
-            if (selectionStart && finalEnd) {
-                const startDate = new Date(selectionStart);
-                const endDate = new Date(finalEnd);
-                const actualStart = startDate <= endDate ? startDate : endDate;
-                const actualEnd = startDate <= endDate ? endDate : startDate;
-                const isMultiDay = selectionStart !== finalEnd;
-                
-                openEventModal(null, null, {
-                    startDate: actualStart.toISOString().split('T')[0],
-                    endDate: actualEnd.toISOString().split('T')[0],
-                    isMultiDay: isMultiDay
-                });
-            }
-            
-            isSelecting = false;
-            selectionStart = null;
-            selectionEnd = null;
-            furthestDate = null;
-        } else if (isTimeSelecting) {
-            // Time grid selection end - calculate final end time from mouse position
-            const currentView = calendar.view;
-            let finalTimeSelectionEnd = timeSelectionEnd;
-            
-            // Get final time from mouse position at release
-            if (currentView.type === 'timeGridDay') {
-                const dayDate = currentView.currentStart.toISOString().split('T')[0];
-                const timeInfo = getTimeFromPosition(e, currentView);
-                if (timeInfo) {
-                    finalTimeSelectionEnd = {
-                        date: dayDate,
-                        time: timeInfo.time,
-                        datetime: timeInfo.datetime
-                    };
-                }
-            }
-            
-            if (timeSelectionStart && finalTimeSelectionEnd) {
-                const startDate = timeSelectionStart.date;
-                const endDate = finalTimeSelectionEnd.date;
-                const startTime = timeSelectionStart.time;
-                const endTime = finalTimeSelectionEnd.time;
-                
-                let startDateTime = new Date(`${startDate}T${startTime}`);
-                let endDateTime = new Date(`${endDate}T${endTime}`);
-                
-                // If end is same as start, add 30 minutes
-                if (endDateTime.getTime() === startDateTime.getTime()) {
-                    endDateTime = new Date(startDateTime.getTime() + 30 * 60 * 1000);
-                }
-                
-                // If end is before start, swap them
-                if (endDateTime < startDateTime) {
-                    [startDateTime, endDateTime] = [endDateTime, startDateTime];
-                }
-                
-                const finalStartDate = startDateTime.toISOString().split('T')[0];
-                const finalEndDate = endDateTime.toISOString().split('T')[0];
-                const finalStartTime = startDateTime.toTimeString().slice(0, 5);
-                const finalEndTime = endDateTime.toTimeString().slice(0, 5);
-                
-                const isMultiDay = finalStartDate !== finalEndDate;
-                
-                openEventModal(null, null, {
-                    startDate: finalStartDate,
-                    endDate: finalEndDate,
-                    startTime: finalStartTime,
-                    endTime: finalEndTime,
-                    isMultiDay: isMultiDay,
-                    isTimed: true
-                });
-            }
-            
-            isTimeSelecting = false;
-            timeSelectionStart = null;
-            timeSelectionEnd = null;
-        }
-    });
-    
-    // Handle mouseup outside calendar
-    document.addEventListener('mouseup', function(e) {
-        if (isSelecting) {
-            document.querySelectorAll('.fc-daygrid-day.selecting').forEach(el => {
-                el.classList.remove('selecting');
-            });
-            isSelecting = false;
-            selectionStart = null;
-            selectionEnd = null;
-            furthestDate = null;
-        }
-        
-        if (isTimeSelecting) {
-            isTimeSelecting = false;
-            timeSelectionStart = null;
-            timeSelectionEnd = null;
-        }
-    });
-    
-    // Load calendar list and settings
-    loadCalendarList();
-    loadSettings();
-
-    function loadSettings() {
-        fetch('/api/settings')
-            .then(response => response.json())
-            .then(data => {
-                userSettings = data;
-                calendar.setOption('firstDay', data.week_start || 0);
-                document.getElementById('weekStart').value = data.week_start || 0;
-                
-                // Set default calendar if available
-                if (data.default_calendar) {
-                    document.getElementById('defaultCalendar').value = data.default_calendar;
-                }
-            })
-            .catch(error => {
-                console.error('Error loading settings:', error);
-            });
-    }
-
-    function loadCalendarList() {
-        fetch('/api/calendar-selection')
-            .then(response => response.json())
-            .then(data => {
-                if (data.calendars && data.selected_calendars) {
-                    userSettings.calendar_colors = data.calendar_colors || {};
-                    updateCalendarSidebar(data.selected_calendars, data.selected_calendars);
-                    updateColorSettings(data.calendars);
-                    updateEventCalendarSelector(data.calendars);
-                }
-            })
-            .catch(error => {
-                console.error('Error loading calendar list:', error);
-                calendarListEl.innerHTML = '<div class="text-danger">Error loading calendars</div>';
-            });
-    }
-
     function getCalendarColor(calName, index) {
         return userSettings.calendar_colors[calName] || defaultCalendarColors[index % defaultCalendarColors.length];
     }
@@ -734,447 +981,7 @@ const currentDistance = Math.abs(currentDateObj - startDateObj);
     };
 });
 </script>
-{% endblock %}{% extends "base.html" %}
-
-{% block title %}Calendar - CalDAV Web Client{% endblock %}
-
-{% block content %}
-<div class="row">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h4>Multi-Calendar View</h4>
-                <div class="btn-group">
-                    <a href="{{ url_for('select_calendar') }}" class="btn btn-outline-primary">Manage Calendars</a>
-                    <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#settingsModal">
-                        Settings
-                    </button>
-                    <button class="btn btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#calendarSidebar" id="sidebarToggle">
-                        Calendars
-                    </button>
-                </div>
-            </div>
-            <div class="card-body">
-                <!-- Collapsible Sidebar -->
-                <div class="collapse mb-3" id="calendarSidebar">
-                    <div class="card card-body">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <h6 class="mb-3">Active Calendars</h6>
-                                <div id="calendarList">Loading calendars...</div>
-                            </div>
-                            <div class="col-md-6">
-                                <h6 class="mb-3">Quick Actions</h6>
-                                <button class="btn btn-sm btn-outline-primary w-100 mb-2" onclick="refreshEvents()">
-                                    Refresh Events
-                                </button>
-                                <button class="btn btn-sm btn-outline-secondary w-100 mb-2" data-bs-toggle="modal" data-bs-target="#settingsModal">
-                                    Customize Colors
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Main Calendar -->
-                <div id="calendar" style="position: relative;">
-                    <div class="calendar-selection-hint" id="selectionHint">
-                        💡 Drag to select date/time ranges for events
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Settings Modal -->
-<div class="modal fade" id="settingsModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-cog me-2"></i>Calendar Settings
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body settings-modal-body">
-                <!-- Week Start Setting -->
-                <div class="week-start-setting">
-                    <label for="weekStart" class="form-label">
-                        <i class="fas fa-calendar-week me-2"></i>Week Starts On
-                    </label>
-                    <select class="form-select" id="weekStart">
-                        <option value="0">Sunday</option>
-                        <option value="1">Monday</option>
-                    </select>
-                    <small class="form-text mt-1 d-block">Choose which day your week starts on</small>
-                </div>
-
-                <!-- Default Calendar Setting -->
-                <div class="week-start-setting">
-                    <label for="defaultCalendar" class="form-label">
-                        <i class="fas fa-calendar-plus me-2"></i>Default Calendar
-                    </label>
-                    <select class="form-select" id="defaultCalendar">
-                        <option value="">Select default calendar...</option>
-                    </select>
-                    <small class="form-text mt-1 d-block">Calendar to use by default when creating new events</small>
-                </div>
-                
-                <!-- Calendar Colors Section -->
-                <div class="mb-3">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <label class="form-label mb-0">
-                            <i class="fas fa-palette me-2"></i>Calendar Colors
-                        </label>
-                        <div class="btn-group btn-group-sm bulk-actions">
-                            <button type="button" class="btn btn-outline-secondary" onclick="resetAllColors()">
-                                <i class="fas fa-undo me-1"></i>Reset All
-                            </button>
-                            <button type="button" class="btn btn-outline-primary" onclick="randomizeColors()">
-                                <i class="fas fa-random me-1"></i>Randomize
-                            </button>
-                        </div>
-                    </div>
-                    <small class="text-muted mb-2 d-block">Customize the color for each calendar</small>
-                    <div id="colorSettings" class="color-settings-grid">
-                        <!-- Color settings will be populated by JavaScript -->
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <i class="fas fa-times me-1"></i>Cancel
-                </button>
-                <button type="button" class="btn btn-primary" id="saveSettingsBtn">
-                    <i class="fas fa-save me-1"></i>Save Settings
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Event Modal -->
-<div class="modal fade" id="eventModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="eventModalLabel">New Event</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="eventForm">
-                    <div class="mb-3">
-                        <label for="eventCalendar" class="form-label">Calendar</label>
-                        <select class="form-select" id="eventCalendar"></select>
-                    </div>
-                    <div class="mb-3">
-                        <label for="eventTitle" class="form-label">Title</label>
-                        <input type="text" class="form-control" id="eventTitle" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="eventDescription" class="form-label">Description</label>
-                        <textarea class="form-control" id="eventDescription" rows="3"></textarea>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="eventStartDate" class="form-label">Start Date</label>
-                                <input type="date" class="form-control" id="eventStartDate" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="eventStartTime" class="form-label">Start Time</label>
-                                <input type="time" class="form-control" id="eventStartTime" required>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="eventEndDate" class="form-label">End Date</label>
-                                <input type="date" class="form-control" id="eventEndDate" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="eventEndTime" class="form-label">End Time</label>
-                                <input type="time" class="form-control" id="eventEndTime" required>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" id="allDayEvent">
-                        <label class="form-check-label" for="allDayEvent">All Day Event</label>
-                    </div>
-                    <input type="hidden" id="eventId">
-                    <input type="hidden" id="eventUrl">
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-danger" id="deleteEventBtn" style="display: none;">Delete</button>
-                <button type="button" class="btn btn-primary" id="saveEventBtn">Save Event</button>
-            </div>
-        </div>
-    </div>
-</div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const calendarEl = document.getElementById('calendar');
-    const calendarListEl = document.getElementById('calendarList');
-    const eventModal = new bootstrap.Modal(document.getElementById('eventModal'));
-    const settingsModal = new bootstrap.Modal(document.getElementById('settingsModal'));
-    
-    let userSettings = { week_start: 0, calendar_colors: {} };
-    
-    const defaultCalendarColors = [
-        '#3788d8', '#28a745', '#dc3545', '#ffc107', '#6f42c1',
-        '#fd7e14', '#20c997', '#e83e8c', '#6c757d', '#17a2b8'
-    ];
-
-    const calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: 'dayGridMonth',
-        firstDay: 0,
-        headerToolbar: {
-            left: 'prev,next today',
-            center: 'title',
-            right: 'dayGridMonth,timeGridWeek,timeGridDay'
-        },
-        selectable: true,
-        selectMirror: true,
-        selectOverlap: true,
-        selectConstraint: null,
-        unselectAuto: true,
-        height: '80vh',
-        // Better all-day event display
-        dayMaxEvents: true,
-        dayMaxEventRows: 3,
-        moreLinkClick: 'popover',
-        eventOrder: function(a, b) {
-            // All-day events first, then by start time
-            if (a.allDay && !b.allDay) return -1;
-            if (!a.allDay && b.allDay) return 1;
-            return a.start - b.start;
-        },
-        eventDisplay: 'auto',
-        displayEventTime: true,
-        events: function(fetchInfo, successCallback, failureCallback) {
-            fetch(`/api/events?start=${fetchInfo.startStr}&end=${fetchInfo.endStr}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        failureCallback(data.error);
-                    } else {
-                        // Remove URLs from events to prevent .ics downloads and format all-day events
-                        const cleanEvents = data.map(event => {
-                            const cleanEvent = { ...event };
-                            // Store the URL in extendedProps but remove it from the event object
-                            if (cleanEvent.url) {
-                                cleanEvent.extendedProps = cleanEvent.extendedProps || {};
-                                cleanEvent.extendedProps.caldavUrl = cleanEvent.url;
-                                delete cleanEvent.url; // Remove URL to prevent download
-                            }
-                            
-                            // Handle all-day events properly
-                            const startDate = new Date(cleanEvent.start);
-                            const endDate = new Date(cleanEvent.end);
-                            
-                            // Check if this is an all-day event
-                            const isAllDay = (startDate.getHours() === 0 && startDate.getMinutes() === 0 && 
-                                            endDate.getHours() === 23 && endDate.getMinutes() === 59) ||
-                                           (startDate.getHours() === 0 && startDate.getMinutes() === 0 && 
-                                            endDate.getHours() === 0 && endDate.getMinutes() === 0);
-                            
-                            if (isAllDay) {
-                                cleanEvent.allDay = true;
-                                cleanEvent.classNames = ['all-day-event'];
-                                // For all-day events spanning multiple days, ensure proper end date
-                                if (startDate.toDateString() !== endDate.toDateString()) {
-                                    // Multi-day all-day event
-                                    cleanEvent.end = endDate.toISOString().split('T')[0];
-                                } else {
-                                    // Single day all-day event - don't set end to avoid issues
-                                    delete cleanEvent.end;
-                                }
-                            }
-                            
-                            return cleanEvent;
-                        });
-                        successCallback(cleanEvents);
-                    }
-                })
-                .catch(error => {
-                    failureCallback(error);
-                });
-        },
-        dateClick: function(info) {
-            // Handle single day clicks
-            if (info.view.type === 'timeGridDay' || info.view.type === 'timeGridWeek') {
-                // Time grid view - extract time from click
-                const clickTime = new Date(info.date);
-                const startTime = clickTime.toTimeString().slice(0, 5);
-                
-                // Default to 1-hour duration
-                const endTime = new Date(clickTime.getTime() + 60 * 60 * 1000).toTimeString().slice(0, 5);
-                
-                openEventModal(null, null, {
-                    startDate: info.dateStr.split('T')[0],
-                    endDate: info.dateStr.split('T')[0],
-                    startTime: startTime,
-                    endTime: endTime,
-                    isMultiDay: false,
-                    isTimed: true
-                });
-            } else {
-                // Day grid view - regular day click
-                openEventModal(null, null, {
-                    startDate: info.dateStr,
-                    endDate: info.dateStr,
-                    isMultiDay: false
-                });
-            }
-        },
-        eventClick: function(info) {
-            // Prevent default action (downloading .ics file)
-            info.jsEvent.preventDefault();
-            openEventModal(null, info.event);
-        },
-        select: function(info) {
-            // Handle date range selection from FullCalendar's native selection
-            const startDate = new Date(info.start);
-            const endDate = new Date(info.end);
-            
-            if (info.view.type === 'timeGridDay' || info.view.type === 'timeGridWeek') {
-                // Time grid view - handle time selection
-                const startTime = startDate.toTimeString().slice(0, 5);
-                const endTime = endDate.toTimeString().slice(0, 5);
-                
-                openEventModal(null, null, {
-                    startDate: startDate.toISOString().split('T')[0],
-                    endDate: endDate.toISOString().split('T')[0],
-                    startTime: startTime,
-                    endTime: endTime,
-                    isMultiDay: startDate.toDateString() !== endDate.toDateString(),
-                    isTimed: true
-                });
-            } else {
-                // Day grid view - handle day selection
-                // Calculate the actual end date (FullCalendar's end is exclusive for day grid)
-                const actualEndDate = new Date(endDate);
-                actualEndDate.setDate(actualEndDate.getDate() - 1);
-                
-                const startDateStr = startDate.toISOString().split('T')[0];
-                const endDateStr = actualEndDate.toISOString().split('T')[0];
-                const isMultiDay = startDateStr !== endDateStr;
-                
-                openEventModal(null, null, {
-                    startDate: startDateStr,
-                    endDate: endDateStr,
-                    isMultiDay: isMultiDay
-                });
-            }
-            
-            // Hide selection hint
-            const hint = document.getElementById('selectionHint');
-            if (hint) {
-                hint.classList.remove('show');
-            }
-            
-            // Clear the selection
-            calendar.unselect();
-        },
-        selectAllow: function(selectInfo) {
-            // Show hint when user starts selecting
-            const hint = document.getElementById('selectionHint');
-            if (hint && selectInfo.start.getTime() !== selectInfo.end.getTime()) {
-                hint.classList.add('show');
-            }
-            return true; // Always allow selection
-        },
-        unselect: function(info) {
-            // Hide hint when selection is cleared
-            const hint = document.getElementById('selectionHint');
-            if (hint) {
-                hint.classList.remove('show');
-            }
-        },
-    });
-
-    calendar.render();
-    
-    // Multi-day selection handling for day grid
-    let isSelecting = false;
-    let selectionStart = null;
-    let selectionEnd = null;
-    let furthestDate = null; // Track the furthest date we've reached
-    
-    // Time-based selection handling for time grid
-    let isTimeSelecting = false;
-    let timeSelectionStart = null;
-    let timeSelectionEnd = null;
-    
-    // Custom drag selection implementation for day grid
-    calendarEl.addEventListener('mousedown', function(e) {
-        const dayEl = e.target.closest('.fc-daygrid-day');
-        const timeGridEl = e.target.closest('.fc-timegrid-col, .fc-timegrid-slot-lane, .fc-timegrid-slot, .fc-timegrid-col-frame');
-        
-        if (dayEl && e.button === 0 && !timeGridEl) {
-            // Day grid selection
-            isSelecting = true;
-            selectionStart = dayEl.getAttribute('data-date');
-            selectionEnd = selectionStart;
-            furthestDate = selectionStart;
-            e.preventDefault();
-            dayEl.classList.add('selecting');
-        } else if (timeGridEl && e.button === 0) {
-            // Time grid selection
-            const currentView = calendar.view;
-            if (currentView.type === 'timeGridDay' || currentView.type === 'timeGridWeek') {
-                isTimeSelecting = true;
-                
-                let col = e.target.closest('.fc-timegrid-col');
-                let dayDate = null;
-                
-                if (col) {
-                    dayDate = col.getAttribute('data-date');
-                }
-                
-                if (!dayDate) {
-                    const colIndex = Array.from(col?.parentElement?.children || []).indexOf(col);
-                    const headerCells = document.querySelectorAll('.fc-col-header-cell');
-                    if (headerCells[colIndex]) {
-                        dayDate = headerCells[colIndex].getAttribute('data-date');
-                    }
-                }
-                
-                if (!dayDate) {
-                    if (currentView.type === 'timeGridDay') {
-                        dayDate = currentView.currentStart.toISOString().split('T')[0];
-                    }
-                }
-                
-                if (dayDate) {
-                    const timeInfo = getTimeFromPosition(e, currentView);
-                    
-                    if (timeInfo) {
-                        timeSelectionStart = {
-                            date: dayDate,
-                            time: timeInfo.time,
-                            datetime: timeInfo.datetime,
-                            element: timeGridEl
-                        };
-                        timeSelectionEnd = timeSelectionStart;
-                        e.preventDefault();
-                    } else {
-                        isTimeSelecting = false;
-                    }
-                } else {
-                    isTimeSelecting = false;
-                }
-            }
-        }
-    });
-    
-    function getTimeFromPosition(e, view) {
+{% endblock %} getTimeFromPosition(e, view) {
         try {
             const timeCols = document.querySelector('.fc-timegrid-cols');
             if (!timeCols) {
@@ -1188,15 +995,15 @@ document.addEventListener('DOMContentLoaded', function() {
             const scrollTop = scrollEl ? scrollEl.scrollTop : 0;
             const adjustedY = relativeY + scrollTop;
             
-            // More precise calculation - no forced rounding to intervals
+            // Calculate time with 30-minute rounding
             const hourHeight = rect.height / 24;
             const totalHours = Math.max(0, Math.min(24, adjustedY / hourHeight));
             
             const hours = Math.floor(totalHours);
-            // Round to nearest 5 minutes, but more precisely
             const fractionalHour = totalHours - hours;
             const totalMinutes = fractionalHour * 60;
-            const minutes = Math.round(totalMinutes / 5) * 5; // Round to nearest 5 minutes
+            // Round to nearest 30 minutes
+            const minutes = Math.round(totalMinutes / 30) * 30;
             
             // Handle edge case where minutes might round to 60
             const finalHours = minutes >= 60 ? hours + 1 : hours;
@@ -1227,4 +1034,218 @@ document.addEventListener('DOMContentLoaded', function() {
                     const furthestDateObj = new Date(furthestDate);
                     
                     const currentDistance = Math.abs(currentDateObj - startDateObj);
-                    const furthestDistance = Math.abs(furthestDateObj - startDateObj
+                    const furthestDistance = Math.abs(furthestDateObj - startDateObj);
+                    
+                    if (currentDistance >= furthestDistance) {
+                        furthestDate = currentDate;
+                        selectionEnd = currentDate;
+                        updateSelectionVisual();
+                    }
+                }
+            }
+        } else if (isTimeSelecting) {
+            // Time grid selection logic
+            const currentView = calendar.view;
+            
+            // Find day date using same logic as mousedown
+            let dayDate = null;
+            
+            // For day view, use the current view date
+            if (currentView.type === 'timeGridDay') {
+                dayDate = currentView.currentStart.toISOString().split('T')[0];
+            } else {
+                // For week view, try to find the column
+                const col = e.target.closest('.fc-timegrid-col');
+                if (col) {
+                    dayDate = col.getAttribute('data-date');
+                }
+                // Add other fallback methods if needed for week view
+                if (!dayDate) {
+                    const colIndex = Array.from(col?.parentElement?.children || []).indexOf(col);
+                    const headerCells = document.querySelectorAll('.fc-col-header-cell');
+                    if (headerCells[colIndex]) {
+                        dayDate = headerCells[colIndex].getAttribute('data-date');
+                    }
+                }
+            }
+            
+            if (dayDate) {
+                const timeInfo = getTimeFromPosition(e, currentView);
+                if (timeInfo) {
+                    timeSelectionEnd = {
+                        date: dayDate,
+                        time: timeInfo.time,
+                        datetime: timeInfo.datetime
+                    };
+                }
+            }
+        }
+    });
+    
+    function updateSelectionVisual() {
+        // Remove previous selection classes
+        document.querySelectorAll('.fc-daygrid-day.selecting').forEach(el => {
+            el.classList.remove('selecting');
+        });
+        
+        if (selectionStart && selectionEnd) {
+            const startDateObj = new Date(selectionStart);
+            const endDateObj = new Date(selectionEnd);
+            const actualStart = startDateObj <= endDateObj ? startDateObj : endDateObj;
+            const actualEnd = startDateObj <= endDateObj ? endDateObj : startDateObj;
+            
+            document.querySelectorAll('.fc-daygrid-day').forEach(dayEl => {
+                const dayDate = new Date(dayEl.getAttribute('data-date'));
+                if (dayDate >= actualStart && dayDate <= actualEnd) {
+                    dayEl.classList.add('selecting');
+                }
+            });
+        }
+    }
+    
+    calendarEl.addEventListener('mouseup', function(e) {
+        if (isSelecting) {
+            // Day grid selection end
+            const finalEnd = furthestDate || selectionStart;
+            
+            document.querySelectorAll('.fc-daygrid-day.selecting').forEach(el => {
+                el.classList.remove('selecting');
+            });
+            
+            if (selectionStart && finalEnd) {
+                const startDate = new Date(selectionStart);
+                const endDate = new Date(finalEnd);
+                const actualStart = startDate <= endDate ? startDate : endDate;
+                const actualEnd = startDate <= endDate ? endDate : startDate;
+                const isMultiDay = selectionStart !== finalEnd;
+                
+                openEventModal(null, null, {
+                    startDate: actualStart.toISOString().split('T')[0],
+                    endDate: actualEnd.toISOString().split('T')[0],
+                    isMultiDay: isMultiDay
+                });
+            }
+            
+            isSelecting = false;
+            selectionStart = null;
+            selectionEnd = null;
+            furthestDate = null;
+        } else if (isTimeSelecting) {
+            // Time grid selection end - calculate final end time from mouse position with 30-minute rounding
+            const currentView = calendar.view;
+            let finalTimeSelectionEnd = timeSelectionEnd;
+            
+            // Get final time from mouse position at release
+            if (currentView.type === 'timeGridDay') {
+                const dayDate = currentView.currentStart.toISOString().split('T')[0];
+                const timeInfo = getTimeFromPosition(e, currentView);
+                if (timeInfo) {
+                    finalTimeSelectionEnd = {
+                        date: dayDate,
+                        time: timeInfo.time,
+                        datetime: timeInfo.datetime
+                    };
+                }
+            }
+            
+            if (timeSelectionStart && finalTimeSelectionEnd) {
+                const startDate = timeSelectionStart.date;
+                const endDate = finalTimeSelectionEnd.date;
+                const startTime = timeSelectionStart.time;
+                const endTime = finalTimeSelectionEnd.time;
+                
+                let startDateTime = new Date(`${startDate}T${startTime}`);
+                let endDateTime = new Date(`${endDate}T${endTime}`);
+                
+                // If end is same as start, add 30 minutes
+                if (endDateTime.getTime() === startDateTime.getTime()) {
+                    endDateTime = new Date(startDateTime.getTime() + 30 * 60 * 1000);
+                }
+                
+                // If end is before start, swap them
+                if (endDateTime < startDateTime) {
+                    [startDateTime, endDateTime] = [endDateTime, startDateTime];
+                }
+                
+                const finalStartDate = startDateTime.toISOString().split('T')[0];
+                const finalEndDate = endDateTime.toISOString().split('T')[0];
+                const finalStartTime = startDateTime.toTimeString().slice(0, 5);
+                const finalEndTime = endDateTime.toTimeString().slice(0, 5);
+                
+                const isMultiDay = finalStartDate !== finalEndDate;
+                
+                openEventModal(null, null, {
+                    startDate: finalStartDate,
+                    endDate: finalEndDate,
+                    startTime: finalStartTime,
+                    endTime: finalEndTime,
+                    isMultiDay: isMultiDay,
+                    isTimed: true
+                });
+            }
+            
+            isTimeSelecting = false;
+            timeSelectionStart = null;
+            timeSelectionEnd = null;
+        }
+    });
+    
+    // Handle mouseup outside calendar
+    document.addEventListener('mouseup', function(e) {
+        if (isSelecting) {
+            document.querySelectorAll('.fc-daygrid-day.selecting').forEach(el => {
+                el.classList.remove('selecting');
+            });
+            isSelecting = false;
+            selectionStart = null;
+            selectionEnd = null;
+            furthestDate = null;
+        }
+        
+        if (isTimeSelecting) {
+            isTimeSelecting = false;
+            timeSelectionStart = null;
+            timeSelectionEnd = null;
+        }
+    });
+    
+    // Load calendar list and settings
+    loadCalendarList();
+    loadSettings();
+
+    function loadSettings() {
+        fetch('/api/settings')
+            .then(response => response.json())
+            .then(data => {
+                userSettings = data;
+                calendar.setOption('firstDay', data.week_start || 0);
+                document.getElementById('weekStart').value = data.week_start || 0;
+                
+                // Set default calendar if available
+                if (data.default_calendar) {
+                    document.getElementById('defaultCalendar').value = data.default_calendar;
+                }
+            })
+            .catch(error => {
+                console.error('Error loading settings:', error);
+            });
+    }
+
+    function loadCalendarList() {
+        fetch('/api/calendar-selection')
+            .then(response => response.json())
+            .then(data => {
+                if (data.calendars && data.selected_calendars) {
+                    userSettings.calendar_colors = data.calendar_colors || {};
+                    updateCalendarSidebar(data.selected_calendars, data.selected_calendars);
+                    updateColorSettings(data.calendars);
+                    updateEventCalendarSelector(data.calendars);
+                }
+            })
+            .catch(error => {
+                console.error('Error loading calendar list:', error);
+                calendarListEl.innerHTML = '<div class="text-danger">Error loading calendars</div>';
+            });
+    }
+
+    function
