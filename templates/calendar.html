@@ -856,6 +856,25 @@ document.addEventListener('DOMContentLoaded', function() {
         toggleTimeInputs(this.checked);
     });
 
+    // Prevent default form submission and handle Enter key
+    document.getElementById('eventForm').addEventListener('submit', function(e) {
+        e.preventDefault(); // Prevent default form submission
+        document.getElementById('saveEventBtn').click(); // Trigger save button click
+    });
+
+    // Optional: Also handle Enter key specifically on form inputs
+    document.getElementById('eventForm').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            // Allow Shift+Enter for line breaks in textarea
+            if (e.target.tagName.toLowerCase() === 'textarea') {
+                return; // Let textarea handle Shift+Enter for new lines
+            }
+            
+            e.preventDefault();
+            document.getElementById('saveEventBtn').click();
+        }
+    });
+
     function showToast(message, type = 'info') {
         let toastContainer = document.getElementById('toastContainer');
         if (!toastContainer) {
