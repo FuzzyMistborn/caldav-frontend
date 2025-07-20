@@ -643,8 +643,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 calendarSelector.selectedIndex = 0;
             }
         }
-        
         eventModal.show();
+
+        setTimeout(() => {
+            document.getElementById('eventTitle').focus();
+            document.getElementById('eventTitle').select(); // Optional: also select any existing text
+        }, 150);
+
     }
 
     function toggleTimeInputs(isAllDay) {
