@@ -1,259 +1,4 @@
-@app.route('/api/calendar-selection', methods=['GET'])
-def get_calendar_selection():
-    """API endpoint to get current calendar selection"""
-    if 'user_id' not in session:
-        return jsonify({'error': 'Not authenticated - please log in again'}), 401
-    
-    user_prefs = UserPreferences.query.get(session['user_id'])
-    if not user_prefs:
-        app.logger.error(f"User preferences not found for user_id: {session['user_id']}")
-        # Try to recreate user preferences
-        try:
-            user_prefs = get_or_create_user_preferences(
-                session.get('username'), 
-                session.get('server_url'), 
-                session.get('server_type', 'generic')
-            )
-            # Also try to get calendars from CalDAV and cache them
-            if all(key in session for key in ['username', 'password', 'caldav_url']):
-                client = CalDAVClient(session['username'], session['password'], 
-                                    session['caldav_url'], session.get('server_type', 'generic'))
-                if client.connect():
-                    calendars = client.get_calendars()
-                    update_calendar_cache(user_prefs.id, calendars)
-                    
-        except Exception as e:
-            app.logger.error(f"Failed to recreate user preferences: {e}")
-            return jsonify({'error': 'Session expired - please log in again'}), 401
-    
-    calendars = [(cal.calendar_name, cal.calendar_url) for cal in user_prefs.calendars]
-    
-    # If no cached calendars, try to get them from CalDAV
-    if not calendars and all(key in session for key in ['username', 'password', 'caldav_url']):
-        try:
-            client = CalDAVClient(session['username'], session['password'], 
-                                session['caldav_url'], session.get('server_type', 'generic'))
-            if client.connect():
-                live_calendars = client.get_calendars()
-                update_calendar_cache(user_prefs.id, live_calendars)
-                calendars = live_calendars
-        except Exception as e:
-            app.logger.error(f"Failed to fetch calendars from CalDAV: {e}")
-    
-    return jsonify({
-        'calendars': calendars,
-        'selected_calendars': user_prefs.get_selected_calendars(),
-        'calendar_colors': user_prefs.get_calendar_colors(),
-        'week_start': user_prefs.week_start
-    })
-
-@app.route('/api/calendar-selection', methods=['POST'])
-def update_calendar_selection():
-    """API endpoint to update selected calendars"""
-    if 'user_id' not in session:
-        return jsonify({'error': 'Not authenticated'}), 401
-    
-    data = request.get_json()
-    selected_calendars = data.get('calendars', [])
-    
-    if not selected_calendars:
-        return jsonify({'error': 'At least one calendar must be selected'}), 400
-    
-    user_prefs = UserPreferences.query.get(session['user_id'])
-    if user_prefs:
-        user_prefs.set_selected_calendars(selected_calendars)
-        user_prefs.updated_at = datetime.utcnow()
-        db.session.commit()
-    
-    return jsonify({'success': True})
-    """API endpoint to create event"""
-    if 'user_id' not in session:
-        return jsonify({'error': 'Not authenticated'}), 401
-    
-    data = request.get_json()
-    if not data:
-        return jsonify({'error': 'No data provided'}), 400
-    
-    app.logger.info(f"Creating event with data: {data}")
-    
-    try:
-        start_dt = datetime.fromisoformat(data['start'].replace('Z', '+00:00'))
-        end_dt = datetime.fromisoformat(data['end'].replace('Z', '+00:00'))
-    except (ValueError, KeyError) as e:
-        app.logger.error(f"Invalid date format: {e}")
-        return jsonify({'error': 'Invalid date format'}), 400
-    
-    # Get user preferences to find available calendars
-    user_prefs = UserPreferences.query.get(session['user_id'])
-    if not user_prefs:
-        return jsonify({'error': 'User preferences not found'}), 404
-    
-    # Determine target calendar
-    target_calendar = data.get('calendar_name')
-    if not target_calendar:
-        selected_calendars = user_prefs.get_selected_calendars()
-        if not selected_calendars:
-            # If no selected calendars, try to get first available calendar
-            available_calendars = [(cal.calendar_name, cal.calendar_url) for cal in user_prefs.calendars]
-            if available_calendars:
-                target_calendar = available_calendars[0][0]
-            else:
-                return jsonify({'error': 'No calendars available'}), 400
-        else:
-            target_calendar = selected_calendars[0]
-    
-    app.logger.info(f"Target calendar: {target_calendar}")
-    
-    # Check CalDAV connection info
-    if not all(key in session for key in ['username', 'password', 'caldav_url']):
-        return jsonify({'error': 'Session incomplete - please log in again'}), 401
-    
-    # Create CalDAV client
-    client = CalDAVClient(session['username'], session['password'], 
-                         session['caldav_url'], session.get('server_type', 'generic'))
-    
-    if not client.connect():
-        app.logger.error("CalDAV connection failed")
-        return jsonify({'error': 'CalDAV connection failed'}), 500
-    
-    if not client.select_calendar(target_calendar):
-        app.logger.error(f"Calendar not found: {target_calendar}")
-        return jsonify({'error': f'Calendar "{target_calendar}" not found'}), 500
-    
-    # Create the event
-    success = client.create_event(
-        data.get('title', ''),
-        data.get('description', ''),
-        start_dt,
-        end_dt
-    )
-    
-    if success:
-        app.logger.info("Event created successfully")
-        return jsonify({'success': True})
-    else:
-        app.logger.error("Failed to create event")
-        return jsonify({'error': 'Failed to create event'}), 500
-
-@app.route('/api/events/<event_id>', methods=['PUT'])
-def api_update_event(event_id):
-    """API endpoint to update event"""
-    if 'user_id' not in session:
-        return jsonify({'error': 'Not authenticated'}), 401
-    
-    data = request.get_json()
-    if not data:
-        return jsonify({'error': 'No data provided'}), 400
-    
-    app.logger.info(f"Updating event {event_id} with data: {data}")
-    
-    try:
-        start_dt = datetime.fromisoformat(data['start'].replace('Z', '+00:00'))
-        end_dt = datetime.fromisoformat(data['end'].replace('Z', '+00:00'))
-    except (ValueError, KeyError) as e:
-        app.logger.error(f"Invalid date format: {e}")
-        return jsonify({'error': 'Invalid date format'}), 400
-    
-    # Extract calendar name from event ID (format: "calendar_name:uid")
-    if ':' in event_id:
-        calendar_name, uid = event_id.split(':', 1)
-    else:
-        # Fallback to first selected calendar
-        user_prefs = UserPreferences.query.get(session['user_id'])
-        selected_calendars = user_prefs.get_selected_calendars() if user_prefs else []
-        calendar_name = selected_calendars[0] if selected_calendars else None
-        uid = event_id
-    
-    if not calendar_name:
-        return jsonify({'error': 'Cannot determine target calendar'}), 400
-    
-    # Check for event URL in data
-    event_url = data.get('url')
-    if not event_url:
-        return jsonify({'error': 'Event URL required for updates'}), 400
-    
-    # Check CalDAV connection info
-    if not all(key in session for key in ['username', 'password', 'caldav_url']):
-        return jsonify({'error': 'Session incomplete - please log in again'}), 401
-    
-    client = CalDAVClient(session['username'], session['password'], 
-                         session['caldav_url'], session.get('server_type', 'generic'))
-    
-    if not client.connect():
-        app.logger.error("CalDAV connection failed")
-        return jsonify({'error': 'CalDAV connection failed'}), 500
-    
-    if not client.select_calendar(calendar_name):
-        app.logger.error(f"Calendar not found: {calendar_name}")
-        return jsonify({'error': f'Calendar "{calendar_name}" not found'}), 500
-    
-    # Update the event
-    success = client.update_event(
-        event_url,
-        data.get('title', ''),
-        data.get('description', ''),
-        start_dt,
-        end_dt
-    )
-    
-    if success:
-        app.logger.info("Event updated successfully")
-        return jsonify({'success': True})
-    else:
-        app.logger.error("Failed to update event")
-        return jsonify({'error': 'Failed to update event'}), 500
-
-@app.route('/api/events/<event_id>', methods=['DELETE'])
-def api_delete_event(event_id):
-    """API endpoint to delete event"""
-    if 'user_id' not in session:
-        return jsonify({'error': 'Not authenticated'}), 401
-    
-    app.logger.info(f"Deleting event: {event_id}")
-    
-    # Extract calendar name from event ID
-    if ':' in event_id:
-        calendar_name, uid = event_id.split(':', 1)
-    else:
-        user_prefs = UserPreferences.query.get(session['user_id'])
-        selected_calendars = user_prefs.get_selected_calendars() if user_prefs else []
-        calendar_name = selected_calendars[0] if selected_calendars else None
-        uid = event_id
-    
-    if not calendar_name:
-        return jsonify({'error': 'Cannot determine target calendar'}), 400
-    
-    # Get event URL from request data
-    data = request.get_json() or {}
-    event_url = data.get('url')
-    
-    if not event_url:
-        return jsonify({'error': 'Event URL required for deletion'}), 400
-    
-    # Check CalDAV connection info
-    if not all(key in session for key in ['username', 'password', 'caldav_url']):
-        return jsonify({'error': 'Session incomplete - please log in again'}), 401
-    
-    client = CalDAVClient(session['username'], session['password'], 
-                         session['caldav_url'], session.get('server_type', 'generic'))
-    
-    if not client.connect():
-        app.logger.error("CalDAV connection failed")
-        return jsonify({'error': 'CalDAV connection failed'}), 500
-    
-    if not client.select_calendar(calendar_name):
-        app.logger.error(f"Calendar not found: {calendar_name}")
-        return jsonify({'error': f'Calendar "{calendar_name}" not found'}), 500
-    
-    # Delete the event
-    success = client.delete_event(event_url)
-    
-    if success:
-        app.logger.info("Event deleted successfully")
-        return jsonify({'success': True})
-    else:
-        app.logger.error("Failed to delete event")
-        return jsonify({'error': 'Failed to delete event'}), 500#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 CalDAV Web Client for Nextcloud
 A Flask-based web application for managing calendar events via CalDAV
@@ -765,6 +510,77 @@ def api_events():
     app.logger.info(f"Returning {len(all_events)} events from {len(selected_calendars)} calendars")
     return jsonify(all_events)
 
+@app.route('/api/events', methods=['POST'])
+def api_create_event():
+    """API endpoint to create event"""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    app.logger.info(f"Creating event with data: {data}")
+    
+    try:
+        start_dt = datetime.fromisoformat(data['start'].replace('Z', '+00:00'))
+        end_dt = datetime.fromisoformat(data['end'].replace('Z', '+00:00'))
+    except (ValueError, KeyError) as e:
+        app.logger.error(f"Invalid date format: {e}")
+        return jsonify({'error': 'Invalid date format'}), 400
+    
+    # Get user preferences to find available calendars
+    user_prefs = UserPreferences.query.get(session['user_id'])
+    if not user_prefs:
+        return jsonify({'error': 'User preferences not found'}), 404
+    
+    # Determine target calendar
+    target_calendar = data.get('calendar_name')
+    if not target_calendar:
+        selected_calendars = user_prefs.get_selected_calendars()
+        if not selected_calendars:
+            # If no selected calendars, try to get first available calendar
+            available_calendars = [(cal.calendar_name, cal.calendar_url) for cal in user_prefs.calendars]
+            if available_calendars:
+                target_calendar = available_calendars[0][0]
+            else:
+                return jsonify({'error': 'No calendars available'}), 400
+        else:
+            target_calendar = selected_calendars[0]
+    
+    app.logger.info(f"Target calendar: {target_calendar}")
+    
+    # Check CalDAV connection info
+    if not all(key in session for key in ['username', 'password', 'caldav_url']):
+        return jsonify({'error': 'Session incomplete - please log in again'}), 401
+    
+    # Create CalDAV client
+    client = CalDAVClient(session['username'], session['password'], 
+                         session['caldav_url'], session.get('server_type', 'generic'))
+    
+    if not client.connect():
+        app.logger.error("CalDAV connection failed")
+        return jsonify({'error': 'CalDAV connection failed'}), 500
+    
+    if not client.select_calendar(target_calendar):
+        app.logger.error(f"Calendar not found: {target_calendar}")
+        return jsonify({'error': f'Calendar "{target_calendar}" not found'}), 500
+    
+    # Create the event
+    success = client.create_event(
+        data.get('title', ''),
+        data.get('description', ''),
+        start_dt,
+        end_dt
+    )
+    
+    if success:
+        app.logger.info("Event created successfully")
+        return jsonify({'success': True})
+    else:
+        app.logger.error("Failed to create event")
+        return jsonify({'error': 'Failed to create event'}), 500
+
 @app.route('/api/settings', methods=['GET'])
 def get_settings():
     """API endpoint to get user settings"""
@@ -875,5 +691,8 @@ if __name__ == '__main__':
     print(f"Starting CalDAV Web Client on 0.0.0.0:{port}")
     print(f"Debug mode: {debug}")
     print(f"Database: {app.config['SQLALCHEMY_DATABASE_URI']}")
+    print(f"Registered routes:")
+    for rule in app.url_map.iter_rules():
+        print(f"  {rule.endpoint}: {rule.rule} {list(rule.methods)}")
     
     app.run(host='0.0.0.0', port=port, debug=debug)
