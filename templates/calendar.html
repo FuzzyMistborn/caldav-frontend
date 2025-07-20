@@ -321,9 +321,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Custom drag selection implementation for day grid
     calendarEl.addEventListener('mousedown', function(e) {
         const dayEl = e.target.closest('.fc-daygrid-day');
-        const timeEl = e.target.closest('.fc-timegrid-slot');
+        const timeGridEl = e.target.closest('.fc-timegrid-col, .fc-timegrid-slot-lane, .fc-timegrid-slot');
         
-        if (dayEl && e.button === 0) {
+        if (dayEl && e.button === 0 && !timeGridEl) {
             // Day grid selection
             isSelecting = true;
             selectionStart = dayEl.getAttribute('data-date');
@@ -331,30 +331,71 @@ document.addEventListener('DOMContentLoaded', function() {
             furthestDate = selectionStart;
             e.preventDefault();
             dayEl.classList.add('selecting');
-        } else if (timeEl && e.button === 0) {
+        } else if (timeGridEl && e.button === 0) {
             // Time grid selection
             const currentView = calendar.view;
             if (currentView.type === 'timeGridDay' || currentView.type === 'timeGridWeek') {
+                console.log('Starting time selection...');
                 isTimeSelecting = true;
                 
-                // Get the time slot information
-                const slotTime = timeEl.getAttribute('data-time');
-                const dayEl = timeEl.closest('.fc-timegrid-col');
-                const dayDate = dayEl ? dayEl.getAttribute('data-date') : null;
+                // Get click position and calculate time
+                const rect = timeGridEl.getBoundingClientRect();
+                const clickY = e.clientY;
                 
-                if (slotTime && dayDate) {
+                // Find the column (day)
+                const col = e.target.closest('.fc-timegrid-col');
+                const dayDate = col ? col.getAttribute('data-date') : null;
+                
+                if (dayDate) {
+                    // Calculate time based on position
+                    const timeInfo = getTimeFromPosition(e, currentView);
+                    console.log('Time selection start:', { dayDate, timeInfo });
+                    
                     timeSelectionStart = {
                         date: dayDate,
-                        time: slotTime,
-                        element: timeEl
+                        time: timeInfo.time,
+                        datetime: timeInfo.datetime,
+                        element: timeGridEl
                     };
                     timeSelectionEnd = timeSelectionStart;
                     e.preventDefault();
-                    timeEl.classList.add('time-selecting');
+                    console.log('Time selection initialized');
                 }
             }
         }
     });
+    
+    function getTimeFromPosition(e, view) {
+        // Get the time grid element
+        const timeCols = document.querySelector('.fc-timegrid-cols');
+        if (!timeCols) return null;
+        
+        const rect = timeCols.getBoundingClientRect();
+        const relativeY = e.clientY - rect.top;
+        
+        // Get scroll position
+        const scrollEl = document.querySelector('.fc-scroller');
+        const scrollTop = scrollEl ? scrollEl.scrollTop : 0;
+        const adjustedY = relativeY + scrollTop;
+        
+        // Calculate time (assuming 24 hours * slot height)
+        const slotHeight = 24; // Approximate slot height in pixels
+        const totalHeight = 24 * slotHeight;
+        const timeRatio = Math.max(0, Math.min(1, adjustedY / totalHeight));
+        
+        const totalMinutes = timeRatio * 24 * 60;
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = Math.floor((totalMinutes % 60) / 15) * 15; // Round to 15-minute intervals
+        
+        const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        const datetime = new Date();
+        datetime.setHours(hours, minutes, 0, 0);
+        
+        return {
+            time: timeString,
+            datetime: datetime
+        };
+    }
     
     calendarEl.addEventListener('mousemove', function(e) {
         if (isSelecting) {
@@ -379,19 +420,20 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         } else if (isTimeSelecting) {
             // Time grid selection logic
-            const timeEl = e.target.closest('.fc-timegrid-slot');
-            if (timeEl) {
-                const slotTime = timeEl.getAttribute('data-time');
-                const dayEl = timeEl.closest('.fc-timegrid-col');
-                const dayDate = dayEl ? dayEl.getAttribute('data-date') : null;
-                
-                if (slotTime && dayDate) {
+            console.log('Time selection mousemove');
+            const currentView = calendar.view;
+            const col = e.target.closest('.fc-timegrid-col');
+            const dayDate = col ? col.getAttribute('data-date') : null;
+            
+            if (dayDate) {
+                const timeInfo = getTimeFromPosition(e, currentView);
+                if (timeInfo) {
+                    console.log('Time selection move to:', { dayDate, timeInfo });
                     timeSelectionEnd = {
                         date: dayDate,
-                        time: slotTime,
-                        element: timeEl
+                        time: timeInfo.time,
+                        datetime: timeInfo.datetime
                     };
-                    updateTimeSelectionVisual();
                 }
             }
         }
@@ -413,36 +455,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 const dayDate = new Date(dayEl.getAttribute('data-date'));
                 if (dayDate >= actualStart && dayDate <= actualEnd) {
                     dayEl.classList.add('selecting');
-                }
-            });
-        }
-    }
-    
-    function updateTimeSelectionVisual() {
-        // Remove previous time selection classes
-        document.querySelectorAll('.fc-timegrid-slot.time-selecting').forEach(el => {
-            el.classList.remove('time-selecting');
-        });
-        
-        if (timeSelectionStart && timeSelectionEnd) {
-            // Create date-time objects for comparison
-            const startDateTime = new Date(`${timeSelectionStart.date}T${timeSelectionStart.time}`);
-            const endDateTime = new Date(`${timeSelectionEnd.date}T${timeSelectionEnd.time}`);
-            
-            const actualStart = startDateTime <= endDateTime ? startDateTime : endDateTime;
-            const actualEnd = startDateTime <= endDateTime ? endDateTime : startDateTime;
-            
-            // Highlight all time slots in the range
-            document.querySelectorAll('.fc-timegrid-slot').forEach(slotEl => {
-                const slotTime = slotEl.getAttribute('data-time');
-                const dayEl = slotEl.closest('.fc-timegrid-col');
-                const dayDate = dayEl ? dayEl.getAttribute('data-date') : null;
-                
-                if (slotTime && dayDate) {
-                    const slotDateTime = new Date(`${dayDate}T${slotTime}`);
-                    if (slotDateTime >= actualStart && slotDateTime <= actualEnd) {
-                        slotEl.classList.add('time-selecting');
-                    }
                 }
             });
         }
@@ -477,31 +489,45 @@ document.addEventListener('DOMContentLoaded', function() {
             furthestDate = null;
         } else if (isTimeSelecting) {
             // Time grid selection end
-            document.querySelectorAll('.fc-timegrid-slot.time-selecting').forEach(el => {
-                el.classList.remove('time-selecting');
-            });
+            console.log('Time selection mouseup');
+            console.log('Selection start:', timeSelectionStart);
+            console.log('Selection end:', timeSelectionEnd);
             
             if (timeSelectionStart && timeSelectionEnd) {
                 // Create date-time objects
-                const startDateTime = new Date(`${timeSelectionStart.date}T${timeSelectionStart.time}`);
-                const endDateTime = new Date(`${timeSelectionEnd.date}T${timeSelectionEnd.time}`);
+                const startDate = timeSelectionStart.date;
+                const endDate = timeSelectionEnd.date;
+                const startTime = timeSelectionStart.time;
+                const endTime = timeSelectionEnd.time;
                 
+                // Ensure end time is after start time
+                const startDateTime = new Date(`${startDate}T${startTime}`);
+                const endDateTime = new Date(`${endDate}T${endTime}`);
+                
+                // If end is before start, swap them
                 const actualStart = startDateTime <= endDateTime ? startDateTime : endDateTime;
                 const actualEnd = startDateTime <= endDateTime ? endDateTime : startDateTime;
                 
-                // Extract date and time components
-                const startDate = actualStart.toISOString().split('T')[0];
-                const endDate = actualEnd.toISOString().split('T')[0];
-                const startTime = actualStart.toTimeString().slice(0, 5);
-                const endTime = actualEnd.toTimeString().slice(0, 5);
+                const finalStartDate = actualStart.toISOString().split('T')[0];
+                const finalEndDate = actualEnd.toISOString().split('T')[0];
+                const finalStartTime = actualStart.toTimeString().slice(0, 5);
+                const finalEndTime = actualEnd.toTimeString().slice(0, 5);
                 
-                const isMultiDay = startDate !== endDate;
+                const isMultiDay = finalStartDate !== finalEndDate;
+                
+                console.log('Opening time-based modal:', {
+                    startDate: finalStartDate,
+                    endDate: finalEndDate,
+                    startTime: finalStartTime,
+                    endTime: finalEndTime,
+                    isMultiDay: isMultiDay
+                });
                 
                 openEventModal(null, null, {
-                    startDate: startDate,
-                    endDate: endDate,
-                    startTime: startTime,
-                    endTime: endTime,
+                    startDate: finalStartDate,
+                    endDate: finalEndDate,
+                    startTime: finalStartTime,
+                    endTime: finalEndTime,
                     isMultiDay: isMultiDay,
                     isTimed: true
                 });
@@ -526,9 +552,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         if (isTimeSelecting) {
-            document.querySelectorAll('.fc-timegrid-slot.time-selecting').forEach(el => {
-                el.classList.remove('time-selecting');
-            });
+            console.log('Time selection ended outside calendar');
             isTimeSelecting = false;
             timeSelectionStart = null;
             timeSelectionEnd = null;
