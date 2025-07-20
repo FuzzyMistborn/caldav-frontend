@@ -43,7 +43,7 @@
                 <!-- Main Calendar -->
                 <div id="calendar" style="position: relative;">
                     <div class="calendar-selection-hint" id="selectionHint">
-                        💡 Drag to select multiple days for multi-day events
+                        💡 Drag to select date/time ranges for events
                     </div>
                 </div>
             </div>
@@ -268,11 +268,30 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         dateClick: function(info) {
             // Handle single day clicks
-            openEventModal(null, null, {
-                startDate: info.dateStr,
-                endDate: info.dateStr,
-                isMultiDay: false
-            });
+            if (info.view.type === 'timeGridDay' || info.view.type === 'timeGridWeek') {
+                // Time grid view - extract time from click
+                const clickTime = new Date(info.date);
+                const startTime = clickTime.toTimeString().slice(0, 5);
+                
+                // Default to 1-hour duration
+                const endTime = new Date(clickTime.getTime() + 60 * 60 * 1000).toTimeString().slice(0, 5);
+                
+                openEventModal(null, null, {
+                    startDate: info.dateStr.split('T')[0],
+                    endDate: info.dateStr.split('T')[0],
+                    startTime: startTime,
+                    endTime: endTime,
+                    isMultiDay: false,
+                    isTimed: true
+                });
+            } else {
+                // Day grid view - regular day click
+                openEventModal(null, null, {
+                    startDate: info.dateStr,
+                    endDate: info.dateStr,
+                    isMultiDay: false
+                });
+            }
         },
         eventClick: function(info) {
             // Prevent default action (downloading .ics file)
@@ -638,17 +657,31 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('eventStartDate').value = dateRange.startDate;
                 document.getElementById('eventEndDate').value = dateRange.endDate;
                 
-                // Only default to all-day for multi-day selections
-                if (dateRange.isMultiDay) {
-                    document.getElementById('allDayEvent').checked = true;
-                    toggleTimeInputs(true);
-                    showToast(`Creating multi-day event from ${dateRange.startDate} to ${dateRange.endDate}`, 'info');
-                } else {
-                    // Single day drag - use timed event like single clicks
+                // Check if this is a timed selection (from time grid views)
+                if (dateRange.isTimed) {
+                    // Time-based selection - always use provided times
                     document.getElementById('allDayEvent').checked = false;
-                    document.getElementById('eventStartTime').value = '09:00';
-                    document.getElementById('eventEndTime').value = '10:00';
+                    document.getElementById('eventStartTime').value = dateRange.startTime;
+                    document.getElementById('eventEndTime').value = dateRange.endTime;
                     toggleTimeInputs(false);
+                    
+                    if (dateRange.isMultiDay) {
+                        showToast(`Creating multi-day timed event from ${dateRange.startDate} ${dateRange.startTime} to ${dateRange.endDate} ${dateRange.endTime}`, 'info');
+                    }
+                } else {
+                    // Day-based selection (from day grid views)
+                    if (dateRange.isMultiDay) {
+                        // Multi-day selection - default to all-day
+                        document.getElementById('allDayEvent').checked = true;
+                        toggleTimeInputs(true);
+                        showToast(`Creating multi-day event from ${dateRange.startDate} to ${dateRange.endDate}`, 'info');
+                    } else {
+                        // Single day selection - default to timed
+                        document.getElementById('allDayEvent').checked = false;
+                        document.getElementById('eventStartTime').value = '09:00';
+                        document.getElementById('eventEndTime').value = '10:00';
+                        toggleTimeInputs(false);
+                    }
                 }
             } else if (dateStr) {
                 // Single date click - timed event

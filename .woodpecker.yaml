@@ -21,10 +21,14 @@ steps:
       format: markdown
       message: "{{#success build.status}}✅  Build for `{{repo.name}}` was *successful*!{{else}}❌  Build for `{{repo.name}}` has *FAILED*!{{/success}} \n🌐  [Output]({{build.link}})\n📝  Commit: {{ commit.message }}"
     when:
-      event: manual
-      status:
-        - success
-        - failure
+      - event: manual
+        status:
+          - success
+          - failure
+      - event: push
+        status:
+          - success
+          - failure
 
 when:
   - event: manual
