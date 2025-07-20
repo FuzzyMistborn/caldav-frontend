@@ -507,58 +507,85 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
+                eventModal.hide();
                 calendar.refetchEvents();
+                showToast('Event deleted successfully!', 'success');
+            } else {
+                showToast(`Error deleting event: ${data.error}`, 'error');
             }
         })
         .catch(error => {
-            console.error('Error updating calendar selection:', error);
-        });
-    }
-
-    function openEventModal(dateStr, event = null) {
-        if (event) {
-            document.getElementById('eventModalLabel').textContent = 'Edit Event';
-            document.getElementById('eventTitle').value = event.title;
-            document.getElementById('eventDescription').value = event.extendedProps.description || '';
-            document.getElementById('deleteEventBtn').style.display = 'inline-block';
-        } else {
-            document.getElementById('eventModalLabel').textContent = 'New Event';
-            document.getElementById('eventForm').reset();
-            document.getElementById('deleteEventBtn').style.display = 'none';
-            
-            if (dateStr) {
-                document.getElementById('eventStartDate').value = dateStr;
-                document.getElementById('eventEndDate').value = dateStr;
-                document.getElementById('eventStartTime').value = '09:00';
-                document.getElementById('eventEndTime').value = '10:00';
-            }
-        }
-        
-        eventModal.show();
-    }
-
-    // Save settings
-    document.getElementById('saveSettingsBtn').addEventListener('click', function() {
-        const weekStart = parseInt(document.getElementById('weekStart').value);
-        
-        fetch('/api/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                week_start: weekStart,
-                calendar_colors: userSettings.calendar_colors
-            })
+            console.error('Error deleting event:', error);
+            showToast('Error deleting event. Please try again.', 'error');
         })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                calendar.setOption('firstDay', weekStart);
-                settingsModal.hide();
-                calendar.refetchEvents();
-                loadCalendarList();
-            }
+        .finally(() => {
+            // Re-enable delete button
+            deleteBtn.disabled = false;
+            deleteBtn.textContent = originalText;
         });
     });
+
+    // All-day event toggle
+    document.getElementById('allDayEvent').addEventListener('change', function() {
+        const timeInputs = document.querySelectorAll('#eventStartTime, #eventEndTime');
+        const timeLabels = document.querySelectorAll('label[for="eventStartTime"], label[for="eventEndTime"]');
+        
+        if (this.checked) {
+            timeInputs.forEach(input => {
+                input.style.display = 'none';
+                input.required = false;
+            });
+            timeLabels.forEach(label => {
+                label.style.display = 'none';
+            });
+        } else {
+            timeInputs.forEach(input => {
+                input.style.display = 'block';
+                input.required = true;
+            });
+            timeLabels.forEach(label => {
+                label.style.display = 'block';
+            });
+        }
+    });
+
+    // Toast notification function
+    function showToast(message, type = 'info') {
+        // Create toast element if it doesn't exist
+        let toastContainer = document.getElementById('toastContainer');
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.id = 'toastContainer';
+            toastContainer.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 9999;
+            `;
+            document.body.appendChild(toastContainer);
+        }
+
+        // Create toast
+        const toast = document.createElement('div');
+        toast.className = `alert alert-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'} alert-dismissible fade show`;
+        toast.style.cssText = `
+            margin-bottom: 10px;
+            min-width: 300px;
+        `;
+        toast.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>
+        `;
+
+        toastContainer.appendChild(toast);
+
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (toast.parentElement) {
+                toast.remove();
+            }
+        }, 5000);
+    }
     
     window.refreshEvents = function() {
         calendar.refetchEvents();
@@ -601,4 +628,247 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 });
 </script>
-{% endblock %}
+{% endblock %}data.success) {
+                calendar.refetchEvents();
+            }
+        })
+        .catch(error => {
+            console.error('Error updating calendar selection:', error);
+        });
+    }
+
+    function openEventModal(dateStr, event = null) {
+        // Reset form
+        document.getElementById('eventForm').reset();
+        document.getElementById('eventId').value = '';
+        document.getElementById('eventUrl').value = '';
+        
+        if (event) {
+            // Editing existing event
+            document.getElementById('eventModalLabel').textContent = 'Edit Event';
+            document.getElementById('eventTitle').value = event.title || '';
+            document.getElementById('eventDescription').value = event.extendedProps.description || '';
+            document.getElementById('deleteEventBtn').style.display = 'inline-block';
+            
+            // Set calendar
+            if (event.extendedProps.calendar_name) {
+                document.getElementById('eventCalendar').value = event.extendedProps.calendar_name;
+            }
+            
+            // Set event ID and URL for updates
+            document.getElementById('eventId').value = event.id || '';
+            document.getElementById('eventUrl').value = event.extendedProps.url || event.url || '';
+            
+            // Parse dates
+            const startDate = new Date(event.start);
+            const endDate = new Date(event.end || event.start);
+            
+            // Check if all-day event (simple heuristic)
+            const isAllDay = event.allDay || 
+                            (startDate.getHours() === 0 && startDate.getMinutes() === 0 && 
+                             endDate.getHours() === 23 && endDate.getMinutes() === 59);
+            
+            document.getElementById('allDayEvent').checked = isAllDay;
+            
+            // Set dates
+            document.getElementById('eventStartDate').value = startDate.toISOString().split('T')[0];
+            document.getElementById('eventEndDate').value = endDate.toISOString().split('T')[0];
+            
+            if (!isAllDay) {
+                // Set times
+                document.getElementById('eventStartTime').value = 
+                    startDate.toTimeString().slice(0, 5);
+                document.getElementById('eventEndTime').value = 
+                    endDate.toTimeString().slice(0, 5);
+            }
+            
+            // Toggle time inputs based on all-day status
+            const timeInputs = document.querySelectorAll('#eventStartTime, #eventEndTime');
+            const timeLabels = document.querySelectorAll('label[for="eventStartTime"], label[for="eventEndTime"]');
+            
+            if (isAllDay) {
+                timeInputs.forEach(input => {
+                    input.style.display = 'none';
+                    input.required = false;
+                });
+                timeLabels.forEach(label => {
+                    label.style.display = 'none';
+                });
+            } else {
+                timeInputs.forEach(input => {
+                    input.style.display = 'block';
+                    input.required = true;
+                });
+                timeLabels.forEach(label => {
+                    label.style.display = 'block';
+                });
+            }
+        } else {
+            // Creating new event
+            document.getElementById('eventModalLabel').textContent = 'New Event';
+            document.getElementById('deleteEventBtn').style.display = 'none';
+            
+            if (dateStr) {
+                document.getElementById('eventStartDate').value = dateStr;
+                document.getElementById('eventEndDate').value = dateStr;
+                document.getElementById('eventStartTime').value = '09:00';
+                document.getElementById('eventEndTime').value = '10:00';
+            }
+            
+            // Set default calendar to first selected one
+            const calendarSelector = document.getElementById('eventCalendar');
+            if (calendarSelector.options.length > 0) {
+                calendarSelector.selectedIndex = 0;
+            }
+        }
+        
+        eventModal.show();
+    }
+
+    // Save settings
+    document.getElementById('saveSettingsBtn').addEventListener('click', function() {
+        const weekStart = parseInt(document.getElementById('weekStart').value);
+        
+        fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                week_start: weekStart,
+                calendar_colors: userSettings.calendar_colors
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                calendar.setOption('firstDay', weekStart);
+                settingsModal.hide();
+                calendar.refetchEvents();
+                loadCalendarList();
+            }
+        });
+    });
+
+    // Save event functionality
+    document.getElementById('saveEventBtn').addEventListener('click', function() {
+        const eventId = document.getElementById('eventId').value;
+        const eventUrl = document.getElementById('eventUrl').value;
+        const title = document.getElementById('eventTitle').value;
+        const description = document.getElementById('eventDescription').value;
+        const startDate = document.getElementById('eventStartDate').value;
+        const startTime = document.getElementById('eventStartTime').value;
+        const endDate = document.getElementById('eventEndDate').value;
+        const endTime = document.getElementById('eventEndTime').value;
+        const allDay = document.getElementById('allDayEvent').checked;
+        const calendarName = document.getElementById('eventCalendar').value;
+
+        // Validation
+        if (!title.trim()) {
+            alert('Please enter an event title');
+            return;
+        }
+
+        if (!startDate || !endDate) {
+            alert('Please select start and end dates');
+            return;
+        }
+
+        // Build start and end datetime strings
+        let startDateTime, endDateTime;
+        
+        if (allDay) {
+            startDateTime = startDate + 'T00:00:00';
+            endDateTime = endDate + 'T23:59:59';
+        } else {
+            if (!startTime || !endTime) {
+                alert('Please select start and end times');
+                return;
+            }
+            startDateTime = startDate + 'T' + startTime + ':00';
+            endDateTime = endDate + 'T' + endTime + ':00';
+        }
+
+        // Prepare event data
+        const eventData = {
+            title: title,
+            description: description,
+            start: startDateTime,
+            end: endDateTime,
+            calendar_name: calendarName
+        };
+
+        // Add URL for updates
+        if (eventUrl) {
+            eventData.url = eventUrl;
+        }
+
+        // Determine if this is create or update
+        const isUpdate = eventId && eventId.trim() !== '';
+        const method = isUpdate ? 'PUT' : 'POST';
+        const url = isUpdate ? `/api/events/${eventId}` : '/api/events';
+
+        // Disable save button during request
+        const saveBtn = document.getElementById('saveEventBtn');
+        const originalText = saveBtn.textContent;
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+
+        // Make API request
+        fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(eventData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                eventModal.hide();
+                calendar.refetchEvents();
+                showToast('Event saved successfully!', 'success');
+            } else {
+                showToast(`Error saving event: ${data.error}`, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error saving event:', error);
+            showToast('Error saving event. Please try again.', 'error');
+        })
+        .finally(() => {
+            // Re-enable save button
+            saveBtn.disabled = false;
+            saveBtn.textContent = originalText;
+        });
+    });
+
+    // Delete event functionality
+    document.getElementById('deleteEventBtn').addEventListener('click', function() {
+        const eventId = document.getElementById('eventId').value;
+        const eventUrl = document.getElementById('eventUrl').value;
+        const title = document.getElementById('eventTitle').value;
+
+        if (!eventId || !eventUrl) {
+            alert('Cannot delete event: missing event information');
+            return;
+        }
+
+        if (!confirm(`Are you sure you want to delete "${title}"?`)) {
+            return;
+        }
+
+        // Disable delete button during request
+        const deleteBtn = document.getElementById('deleteEventBtn');
+        const originalText = deleteBtn.textContent;
+        deleteBtn.disabled = true;
+        deleteBtn.textContent = 'Deleting...';
+
+        fetch(`/api/events/${eventId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ url: eventUrl })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (
