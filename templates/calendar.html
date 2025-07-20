@@ -321,7 +321,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Custom drag selection implementation for day grid
     calendarEl.addEventListener('mousedown', function(e) {
         const dayEl = e.target.closest('.fc-daygrid-day');
-        const timeGridEl = e.target.closest('.fc-timegrid-col, .fc-timegrid-slot-lane, .fc-timegrid-slot');
+        const timeGridEl = e.target.closest('.fc-timegrid-col, .fc-timegrid-slot-lane, .fc-timegrid-slot, .fc-timegrid-col-frame');
         
         if (dayEl && e.button === 0 && !timeGridEl) {
             // Day grid selection
@@ -338,9 +338,38 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('Starting time selection...');
                 isTimeSelecting = true;
                 
-                // Find the column (day)
-                const col = e.target.closest('.fc-timegrid-col');
-                const dayDate = col ? col.getAttribute('data-date') : null;
+                // Try multiple ways to find the column and day date
+                let col = e.target.closest('.fc-timegrid-col');
+                let dayDate = null;
+                
+                if (col) {
+                    dayDate = col.getAttribute('data-date');
+                    console.log('Found day date from fc-timegrid-col:', dayDate);
+                }
+                
+                // If not found, try other approaches
+                if (!dayDate) {
+                    // Try to find from the column header
+                    const colIndex = Array.from(col?.parentElement?.children || []).indexOf(col);
+                    const headerCells = document.querySelectorAll('.fc-col-header-cell');
+                    if (headerCells[colIndex]) {
+                        dayDate = headerCells[colIndex].getAttribute('data-date');
+                        console.log('Found day date from header cell:', dayDate);
+                    }
+                }
+                
+                // If still not found, try to get current date from view
+                if (!dayDate) {
+                    if (currentView.type === 'timeGridDay') {
+                        // For day view, use the current date
+                        dayDate = currentView.currentStart.toISOString().split('T')[0];
+                        console.log('Using current view date for day view:', dayDate);
+                    }
+                }
+                
+                console.log('Final day date:', dayDate);
+                console.log('Column element:', col);
+                console.log('All column attributes:', col ? Array.from(col.attributes).map(a => `${a.name}="${a.value}"`).join(', ') : 'none');
                 
                 if (dayDate) {
                     // Calculate time based on position
