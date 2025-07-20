@@ -604,58 +604,6 @@ def get_settings():
         'timezone': user_prefs.timezone
     })
 
-@app.route('/api/settings', methods=['POST'])
-def update_settings():
-    """API endpoint to update user settings"""
-    if 'user_id' not in session:
-        return jsonify({'error': 'Not authenticated'}), 401
-    
-    data = request.get_json()
-    user_prefs = UserPreferences.query.get(session['user_id'])
-    
-    if not user_prefs:
-        return jsonify({'error': 'User preferences not found'}), 404
-    
-    # Update settings
-    if 'week_start' in data:
-        user_prefs.week_start = int(data['week_start'])
-    
-    if 'calendar_colors' in data:
-        user_prefs.set_calendar_colors(data['calendar_colors'])
-    
-    if 'default_calendar' in data:  # Add this block
-        user_prefs.default_calendar = data['default_calendar']
-    
-    if 'default_view' in data:
-        user_prefs.default_view = data['default_view']
-    
-    if 'timezone' in data:
-        user_prefs.timezone = data['timezone']
-    
-    user_prefs.updated_at = datetime.utcnow()
-    db.session.commit()
-    
-    return jsonify({'success': True})
-
-@app.route('/api/calendar-selection', methods=['GET'])
-def get_calendar_selection():
-    """API endpoint to get current calendar selection"""
-    if 'user_id' not in session:
-        return jsonify({'error': 'Not authenticated'}), 401
-    
-    user_prefs = UserPreferences.query.get(session['user_id'])
-    if not user_prefs:
-        return jsonify({'error': 'User preferences not found'}), 404
-    
-    calendars = [(cal.calendar_name, cal.calendar_url) for cal in user_prefs.calendars]
-    
-    return jsonify({
-        'calendars': calendars,
-        'selected_calendars': user_prefs.get_selected_calendars(),
-        'calendar_colors': user_prefs.get_calendar_colors(),
-        'week_start': user_prefs.week_start
-    })
-
 @app.route('/api/calendar-selection', methods=['GET'])
 def get_calendar_selection():
     """API endpoint to get current calendar selection"""
