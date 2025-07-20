@@ -284,7 +284,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 openEventModal(null, null, {
                     startDate: info.dateStr,
                     endDate: info.dateStr,
-                    isMultiDay: false
+                    isMultiDay: false,
+                    isAllDay: true  // Default to all-day for month view clicks
                 });
             }
         },
@@ -333,7 +334,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 openEventModal(null, null, {
                     startDate: startDateStr,
                     endDate: endDateStr,
-                    isMultiDay: isMultiDay
+                    isMultiDay: isMultiDay,
+                    isAllDay: true  // Default to all-day for day grid selections
                 });
             }
             
