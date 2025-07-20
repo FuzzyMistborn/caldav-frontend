@@ -345,6 +345,50 @@
             color: #333;
         }
 
+        /* Date selection styling */
+        .fc-highlight {
+            background: rgba(0, 123, 255, 0.2) !important;
+            border: 2px solid #007bff !important;
+            border-radius: 4px;
+        }
+
+        /* Selection mirror styling */
+        .fc-select-mirror {
+            background: rgba(0, 123, 255, 0.3) !important;
+            border: 2px dashed #007bff !important;
+            border-radius: 4px;
+        }
+
+        /* Improve calendar cell selection feedback */
+        .fc-daygrid-day-frame:hover {
+            background-color: rgba(0, 123, 255, 0.05);
+            cursor: crosshair;
+        }
+
+        .fc-day-today .fc-daygrid-day-frame:hover {
+            background-color: rgba(0, 123, 255, 0.1);
+        }
+
+        /* Selection instructions */
+        .calendar-selection-hint {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.85em;
+            z-index: 1000;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .calendar-selection-hint.show {
+            opacity: 1;
+        }
+
         /* Responsive adjustments */
         @media (max-width: 768px) {
             .fc-event.all-day-event {
@@ -355,6 +399,10 @@
             
             .fc-event.all-day-event .fc-event-title {
                 font-size: 0.9em;
+            }
+            
+            .fc-daygrid-day-frame:hover {
+                cursor: pointer;
             }
         }
     </style>

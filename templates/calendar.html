@@ -41,7 +41,11 @@
                 </div>
                 
                 <!-- Main Calendar -->
-                <div id="calendar"></div>
+                <div id="calendar" style="position: relative;">
+                    <div class="calendar-selection-hint" id="selectionHint">
+                        💡 Drag to select multiple days for multi-day events
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -263,7 +267,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
         },
         dateClick: function(info) {
-            openEventModal(info.dateStr);
+            // Only handle single day clicks if not in selection mode
+            if (!info.view.calendar.state.isSelecting) {
+                openEventModal(null, null, {
+                    startDate: info.dateStr,
+                    endDate: info.dateStr,
+                    isMultiDay: false
+                });
+            }
         },
         eventClick: function(info) {
             // Prevent default action (downloading .ics file)
@@ -450,7 +461,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    function openEventModal(dateStr, event = null) {
+    function openEventModal(dateStr, event = null, dateRange = null) {
         // Reset form
         document.getElementById('eventForm').reset();
         document.getElementById('eventId').value = '';
@@ -502,11 +513,28 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('eventModalLabel').textContent = 'New Event';
             document.getElementById('deleteEventBtn').style.display = 'none';
             
-            if (dateStr) {
+            // Handle date range selection or single date
+            if (dateRange) {
+                document.getElementById('eventStartDate').value = dateRange.startDate;
+                document.getElementById('eventEndDate').value = dateRange.endDate;
+                
+                // If multi-day selection, default to all-day event
+                if (dateRange.isMultiDay) {
+                    document.getElementById('allDayEvent').checked = true;
+                    toggleTimeInputs(true);
+                    showToast(`Creating multi-day event from ${dateRange.startDate} to ${dateRange.endDate}`, 'info');
+                } else {
+                    document.getElementById('eventStartTime').value = '09:00';
+                    document.getElementById('eventEndTime').value = '10:00';
+                    toggleTimeInputs(false);
+                }
+            } else if (dateStr) {
+                // Single date click
                 document.getElementById('eventStartDate').value = dateStr;
                 document.getElementById('eventEndDate').value = dateStr;
                 document.getElementById('eventStartTime').value = '09:00';
                 document.getElementById('eventEndTime').value = '10:00';
+                toggleTimeInputs(false);
             }
             
             // Set default calendar
