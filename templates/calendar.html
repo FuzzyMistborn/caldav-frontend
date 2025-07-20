@@ -35,12 +35,6 @@
                                 <button class="btn btn-sm btn-outline-secondary w-100 mb-2" data-bs-toggle="modal" data-bs-target="#settingsModal">
                                     Customize Colors
                                 </button>
-                                <button class="btn btn-sm btn-outline-success w-100 mb-2" onclick="testEventModal()">
-                                    Test Event Modal
-                                </button>
-                                <button class="btn btn-sm btn-outline-info w-100 mb-2" onclick="testMultiDayModal()">
-                                    Test Multi-Day Modal
-                                </button>
                             </div>
                         </div>
                     </div>
@@ -273,7 +267,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
         },
         dateClick: function(info) {
-            console.log('Date clicked:', info.dateStr);
             // Handle single day clicks
             openEventModal(null, null, {
                 startDate: info.dateStr,
@@ -295,30 +288,26 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('Event modal element:', document.getElementById('eventModal'));
     console.log('Bootstrap modal object:', eventModal);
     
-    // Add additional debugging for selection
+    // Multi-day selection handling
     let isSelecting = false;
     let selectionStart = null;
     let selectionEnd = null;
     let furthestDate = null; // Track the furthest date we've reached
     
-    // Use event delegation for better performance and reliability
+    // Custom drag selection implementation
     calendarEl.addEventListener('mousedown', function(e) {
         const dayEl = e.target.closest('.fc-daygrid-day');
         if (dayEl && e.button === 0) { // Left mouse button
-            console.log('Mouse down on day element');
             isSelecting = true;
             selectionStart = dayEl.getAttribute('data-date');
-            selectionEnd = selectionStart; // Initialize end with start
-            furthestDate = selectionStart; // Track furthest reached
-            console.log('Selection started:', selectionStart);
+            selectionEnd = selectionStart;
+            furthestDate = selectionStart;
             e.preventDefault(); // Prevent text selection
             
-            // Add visual feedback
             dayEl.classList.add('selecting');
         }
     });
     
-    // Use mousemove instead of mouseenter for better tracking
     calendarEl.addEventListener('mousemove', function(e) {
         if (isSelecting) {
             const dayEl = e.target.closest('.fc-daygrid-day');
@@ -337,9 +326,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (currentDistance >= furthestDistance) {
                         furthestDate = currentDate;
                         selectionEnd = currentDate;
-                        console.log('Selection moved to:', currentDate, '(distance:', currentDistance, ')');
-                        
-                        // Update visual feedback
                         updateSelectionVisual();
                     }
                 }
@@ -374,7 +360,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (isSelecting) {
             // Use the furthest date as the final selection
             const finalEnd = furthestDate || selectionStart;
-            console.log('Selection ended:', finalEnd, '(using furthest reached date)');
             
             // Remove visual feedback
             document.querySelectorAll('.fc-daygrid-day.selecting').forEach(el => {
@@ -391,12 +376,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 const isMultiDay = selectionStart !== finalEnd;
                 
-                console.log('Opening modal for drag selection:', {
-                    start: actualStart.toISOString().split('T')[0],
-                    end: actualEnd.toISOString().split('T')[0],
-                    isMultiDay: isMultiDay
-                });
-                
                 openEventModal(null, null, {
                     startDate: actualStart.toISOString().split('T')[0],
                     endDate: actualEnd.toISOString().split('T')[0],
@@ -411,11 +390,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Also listen for mouseup on document in case user drags outside calendar
+    // Handle mouseup outside calendar
     document.addEventListener('mouseup', function(e) {
         if (isSelecting) {
-            console.log('Mouse up outside calendar, ending selection');
-            
             // Remove visual feedback
             document.querySelectorAll('.fc-daygrid-day.selecting').forEach(el => {
                 el.classList.remove('selecting');
@@ -938,34 +915,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Global functions
     window.refreshEvents = function() {
         calendar.refetchEvents();
-    };
-
-    window.testEventModal = function() {
-        console.log('Testing event modal...');
-        try {
-            openEventModal(null, null, {
-                startDate: '2025-07-20',
-                endDate: '2025-07-20',
-                isMultiDay: false
-            });
-        } catch (error) {
-            console.error('Error opening modal:', error);
-            alert('Error opening modal: ' + error.message);
-        }
-    };
-
-    window.testMultiDayModal = function() {
-        console.log('Testing multi-day modal...');
-        try {
-            openEventModal(null, null, {
-                startDate: '2025-07-20',
-                endDate: '2025-07-22',
-                isMultiDay: true
-            });
-        } catch (error) {
-            console.error('Error opening multi-day modal:', error);
-            alert('Error opening multi-day modal: ' + error.message);
-        }
     };
 
     window.resetColor = function(calName, index) {
