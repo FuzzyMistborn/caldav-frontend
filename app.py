@@ -656,6 +656,46 @@ def get_calendar_selection():
         'week_start': user_prefs.week_start
     })
 
+@app.route('/api/calendar-selection', methods=['GET'])
+def get_calendar_selection():
+    """API endpoint to get current calendar selection"""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    user_prefs = UserPreferences.query.get(session['user_id'])
+    if not user_prefs:
+        return jsonify({'error': 'User preferences not found'}), 404
+    
+    calendars = [(cal.calendar_name, cal.calendar_url) for cal in user_prefs.calendars]
+    
+    return jsonify({
+        'calendars': calendars,
+        'selected_calendars': user_prefs.get_selected_calendars(),
+        'calendar_colors': user_prefs.get_calendar_colors(),
+        'week_start': user_prefs.week_start
+    })
+
+@app.route('/api/calendar-selection', methods=['POST'])
+def update_calendar_selection():
+    """API endpoint to update calendar selection"""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    data = request.get_json()
+    if not data or 'calendars' not in data:
+        return jsonify({'error': 'No calendar data provided'}), 400
+    
+    user_prefs = UserPreferences.query.get(session['user_id'])
+    if not user_prefs:
+        return jsonify({'error': 'User preferences not found'}), 404
+    
+    # Update selected calendars
+    user_prefs.set_selected_calendars(data['calendars'])
+    user_prefs.updated_at = datetime.utcnow()
+    db.session.commit()
+    
+    return jsonify({'success': True})
+
 @app.route('/api/events/<event_id>', methods=['PUT'])
 def api_update_event(event_id):
     """API endpoint to update event"""
