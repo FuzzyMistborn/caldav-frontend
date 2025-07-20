@@ -536,8 +536,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
             
-            console.log('Final time selection - Start:', timeSelectionStart?.time, 'End:', finalTimeSelectionEnd?.time);
-            
             if (timeSelectionStart && finalTimeSelectionEnd) {
                 // Create date-time objects
                 const startDate = timeSelectionStart.date;
@@ -545,13 +543,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 const startTime = timeSelectionStart.time;
                 const endTime = finalTimeSelectionEnd.time;
                 
-                // Ensure end time is after start time (add 1 hour minimum if same time)
+                // Ensure end time is after start time (add 30 minutes minimum if same time)
                 let startDateTime = new Date(`${startDate}T${startTime}`);
                 let endDateTime = new Date(`${endDate}T${endTime}`);
                 
-                // If end is same as start, add 1 hour
+                // If end is same as start, add 30 minutes (more reasonable than 1 hour)
                 if (endDateTime.getTime() === startDateTime.getTime()) {
-                    endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000);
+                    endDateTime = new Date(startDateTime.getTime() + 30 * 60 * 1000);
                 }
                 
                 // If end is before start, swap them
