@@ -582,8 +582,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function openEventModal(dateStr, event = null, dateRange = null) {
-        console.log('Opening event modal with:', { dateStr, event, dateRange });
-        
         // Reset form
         document.getElementById('eventForm').reset();
         document.getElementById('eventId').value = '';
@@ -637,23 +635,23 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Handle date range selection or single date
             if (dateRange) {
-                console.log('Setting dates from dateRange:', dateRange);
                 document.getElementById('eventStartDate').value = dateRange.startDate;
                 document.getElementById('eventEndDate').value = dateRange.endDate;
                 
-                // If multi-day selection, default to all-day event
+                // Only default to all-day for multi-day selections
                 if (dateRange.isMultiDay) {
                     document.getElementById('allDayEvent').checked = true;
                     toggleTimeInputs(true);
                     showToast(`Creating multi-day event from ${dateRange.startDate} to ${dateRange.endDate}`, 'info');
                 } else {
-                    // For single day drag selections, also default to all-day to distinguish from clicks
-                    document.getElementById('allDayEvent').checked = true;
-                    toggleTimeInputs(true);
+                    // Single day drag - use timed event like single clicks
+                    document.getElementById('allDayEvent').checked = false;
+                    document.getElementById('eventStartTime').value = '09:00';
+                    document.getElementById('eventEndTime').value = '10:00';
+                    toggleTimeInputs(false);
                 }
             } else if (dateStr) {
-                // Single date click (legacy support) - this is from regular dateClick
-                console.log('Setting date from dateStr:', dateStr);
+                // Single date click - timed event
                 document.getElementById('eventStartDate').value = dateStr;
                 document.getElementById('eventEndDate').value = dateStr;
                 document.getElementById('eventStartTime').value = '09:00';
@@ -673,7 +671,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
         
-        console.log('About to show modal...');
         eventModal.show();
     }
 
