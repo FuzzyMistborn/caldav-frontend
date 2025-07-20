@@ -35,6 +35,9 @@
                                 <button class="btn btn-sm btn-outline-secondary w-100 mb-2" data-bs-toggle="modal" data-bs-target="#settingsModal">
                                     Customize Colors
                                 </button>
+                                <button class="btn btn-sm btn-outline-success w-100 mb-2" onclick="testEventModal()">
+                                    Test Event Modal
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -267,14 +270,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
         },
         dateClick: function(info) {
-            // Only handle single day clicks if not in selection mode
-            if (!info.view.calendar.state.isSelecting) {
-                openEventModal(null, null, {
-                    startDate: info.dateStr,
-                    endDate: info.dateStr,
-                    isMultiDay: false
-                });
-            }
+            console.log('Date clicked:', info.dateStr);
+            // Handle single day clicks
+            openEventModal(null, null, {
+                startDate: info.dateStr,
+                endDate: info.dateStr,
+                isMultiDay: false
+            });
         },
         eventClick: function(info) {
             // Prevent default action (downloading .ics file)
@@ -284,6 +286,11 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     calendar.render();
+    
+    // Debug: Test if modal works
+    console.log('Calendar rendered, testing modal...');
+    console.log('Event modal element:', document.getElementById('eventModal'));
+    console.log('Bootstrap modal object:', eventModal);
     
     // Load calendar list and settings
     loadCalendarList();
@@ -462,6 +469,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function openEventModal(dateStr, event = null, dateRange = null) {
+        console.log('Opening event modal with:', { dateStr, event, dateRange });
+        
         // Reset form
         document.getElementById('eventForm').reset();
         document.getElementById('eventId').value = '';
@@ -515,6 +524,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Handle date range selection or single date
             if (dateRange) {
+                console.log('Setting dates from dateRange:', dateRange);
                 document.getElementById('eventStartDate').value = dateRange.startDate;
                 document.getElementById('eventEndDate').value = dateRange.endDate;
                 
@@ -524,29 +534,34 @@ document.addEventListener('DOMContentLoaded', function() {
                     toggleTimeInputs(true);
                     showToast(`Creating multi-day event from ${dateRange.startDate} to ${dateRange.endDate}`, 'info');
                 } else {
+                    document.getElementById('allDayEvent').checked = false;
                     document.getElementById('eventStartTime').value = '09:00';
                     document.getElementById('eventEndTime').value = '10:00';
                     toggleTimeInputs(false);
                 }
             } else if (dateStr) {
-                // Single date click
+                // Single date click (legacy support)
+                console.log('Setting date from dateStr:', dateStr);
                 document.getElementById('eventStartDate').value = dateStr;
                 document.getElementById('eventEndDate').value = dateStr;
                 document.getElementById('eventStartTime').value = '09:00';
                 document.getElementById('eventEndTime').value = '10:00';
+                document.getElementById('allDayEvent').checked = false;
                 toggleTimeInputs(false);
             }
             
             // Set default calendar
+            const calendarSelector = document.getElementById('eventCalendar');
             const defaultCalendar = userSettings.default_calendar || 
                                   document.getElementById('defaultCalendar').value;
-            if (defaultCalendar) {
-                document.getElementById('eventCalendar').value = defaultCalendar;
-            } else if (calendarSelector.options.length > 0) {
+            if (defaultCalendar && calendarSelector) {
+                calendarSelector.value = defaultCalendar;
+            } else if (calendarSelector && calendarSelector.options.length > 0) {
                 calendarSelector.selectedIndex = 0;
             }
         }
         
+        console.log('About to show modal...');
         eventModal.show();
     }
 
@@ -788,6 +803,20 @@ document.addEventListener('DOMContentLoaded', function() {
     // Global functions
     window.refreshEvents = function() {
         calendar.refetchEvents();
+    };
+
+    window.testEventModal = function() {
+        console.log('Testing event modal...');
+        try {
+            openEventModal(null, null, {
+                startDate: '2025-07-20',
+                endDate: '2025-07-20',
+                isMultiDay: false
+            });
+        } catch (error) {
+            console.error('Error opening modal:', error);
+            alert('Error opening modal: ' + error.message);
+        }
     };
 
     window.resetColor = function(calName, index) {
