@@ -91,6 +91,7 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="deleteEventBtn" style="display: none;">Delete Event</button>
                 <button type="button" class="btn btn-primary" id="saveEventBtn">Save Event</button>
             </div>
         </div>
@@ -146,8 +147,19 @@ document.addEventListener('DOMContentLoaded', function() {
                             debugInfo.innerHTML = `<strong>Error:</strong> ${data.error}`;
                             failureCallback(data.error);
                         } else {
-                            debugInfo.innerHTML = `<strong>Success:</strong> Loaded ${data.length} events`;
-                            successCallback(data);
+                            // Remove URLs from events to prevent .ics downloads
+                            const cleanEvents = data.map(event => {
+                                const cleanEvent = { ...event };
+                                // Store the URL in extendedProps but remove it from the event object
+                                if (cleanEvent.url) {
+                                    cleanEvent.extendedProps = cleanEvent.extendedProps || {};
+                                    cleanEvent.extendedProps.caldavUrl = cleanEvent.url;
+                                    delete cleanEvent.url; // Remove URL to prevent download
+                                }
+                                return cleanEvent;
+                            });
+                            debugInfo.innerHTML = `<strong>Success:</strong> Loaded ${cleanEvents.length} events`;
+                            successCallback(cleanEvents);
                         }
                     })
                     .catch(error => {
@@ -162,6 +174,8 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             eventClick: function(info) {
                 console.log('Event clicked:', info.event);
+                // Prevent default action (downloading .ics file)
+                info.jsEvent.preventDefault();
                 openEventModal(null, info.event);
             }
         });
@@ -250,16 +264,76 @@ document.addEventListener('DOMContentLoaded', function() {
             saveBtn.textContent = 'Save Event';
         });
     });
+
+    // Delete event functionality
+    document.getElementById('deleteEventBtn').addEventListener('click', function() {
+        console.log('Delete event clicked');
+        
+        const eventId = document.getElementById('eventId').value;
+        const eventUrl = document.getElementById('eventUrl').value;
+        const title = document.getElementById('eventTitle').value;
+        
+        if (!eventId || !eventUrl) {
+            showAlert('Cannot delete event: missing event information', 'danger');
+            return;
+        }
+        
+        if (!confirm(`Are you sure you want to delete "${title}"?`)) {
+            return;
+        }
+        
+        console.log('Deleting event:', { eventId, eventUrl });
+        
+        // Disable delete button
+        const deleteBtn = document.getElementById('deleteEventBtn');
+        deleteBtn.disabled = true;
+        deleteBtn.textContent = 'Deleting...';
+        
+        fetch(`/api/events/${eventId}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: eventUrl })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Delete response:', data);
+            if (data.success) {
+                globalEventModal.hide();
+                if (globalCalendar) {
+                    globalCalendar.refetchEvents();
+                }
+                showAlert('Event deleted successfully!', 'success');
+            } else {
+                showAlert(`Error deleting event: ${data.error}`, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Delete error:', error);
+            showAlert('Error deleting event', 'danger');
+        })
+        .finally(() => {
+            // Re-enable delete button
+            deleteBtn.disabled = false;
+            deleteBtn.textContent = 'Delete Event';
+        });
+    });
     
     function openEventModal(dateStr, event = null) {
         console.log('Opening event modal:', { dateStr, event });
         
         if (event) {
+            // Editing existing event
             document.getElementById('eventModalLabel').textContent = 'Edit Event';
             document.getElementById('eventTitle').value = event.title || '';
             document.getElementById('eventDescription').value = event.extendedProps?.description || '';
             document.getElementById('eventId').value = event.id || '';
-            document.getElementById('eventUrl').value = event.extendedProps?.url || '';
+            
+            // Get CalDAV URL from extendedProps
+            const caldavUrl = event.extendedProps?.caldavUrl || event.extendedProps?.url || '';
+            document.getElementById('eventUrl').value = caldavUrl;
+            
+            // Show delete button for existing events
+            document.getElementById('deleteEventBtn').style.display = 'inline-block';
             
             // Parse dates
             const startDate = new Date(event.start);
@@ -270,10 +344,14 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('eventStartTime').value = startDate.toTimeString().slice(0, 5);
             document.getElementById('eventEndTime').value = endDate.toTimeString().slice(0, 5);
         } else {
+            // Creating new event
             document.getElementById('eventModalLabel').textContent = 'New Event';
             document.getElementById('eventForm').reset();
             document.getElementById('eventId').value = '';
             document.getElementById('eventUrl').value = '';
+            
+            // Hide delete button for new events
+            document.getElementById('deleteEventBtn').style.display = 'none';
             
             if (dateStr) {
                 document.getElementById('eventStartDate').value = dateStr;

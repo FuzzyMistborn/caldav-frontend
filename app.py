@@ -647,25 +647,125 @@ def get_calendar_selection():
         'week_start': user_prefs.week_start
     })
 
-@app.route('/api/calendar-selection', methods=['POST'])
-def update_calendar_selection():
-    """API endpoint to update selected calendars"""
+@app.route('/api/events/<event_id>', methods=['PUT'])
+def api_update_event(event_id):
+    """API endpoint to update event"""
     if 'user_id' not in session:
         return jsonify({'error': 'Not authenticated'}), 401
     
     data = request.get_json()
-    selected_calendars = data.get('calendars', [])
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
     
-    if not selected_calendars:
-        return jsonify({'error': 'At least one calendar must be selected'}), 400
+    app.logger.info(f"Updating event {event_id} with data: {data}")
     
-    user_prefs = UserPreferences.query.get(session['user_id'])
-    if user_prefs:
-        user_prefs.set_selected_calendars(selected_calendars)
-        user_prefs.updated_at = datetime.utcnow()
-        db.session.commit()
+    try:
+        start_dt = datetime.fromisoformat(data['start'].replace('Z', '+00:00'))
+        end_dt = datetime.fromisoformat(data['end'].replace('Z', '+00:00'))
+    except (ValueError, KeyError) as e:
+        app.logger.error(f"Invalid date format: {e}")
+        return jsonify({'error': 'Invalid date format'}), 400
     
-    return jsonify({'success': True})
+    # Extract calendar name from event ID (format: "calendar_name:uid")
+    if ':' in event_id:
+        calendar_name, uid = event_id.split(':', 1)
+    else:
+        # Fallback to first selected calendar
+        user_prefs = UserPreferences.query.get(session['user_id'])
+        selected_calendars = user_prefs.get_selected_calendars() if user_prefs else []
+        calendar_name = selected_calendars[0] if selected_calendars else None
+        uid = event_id
+    
+    if not calendar_name:
+        return jsonify({'error': 'Cannot determine target calendar'}), 400
+    
+    # Check for event URL in data
+    event_url = data.get('url')
+    if not event_url:
+        return jsonify({'error': 'Event URL required for updates'}), 400
+    
+    # Check CalDAV connection info
+    if not all(key in session for key in ['username', 'password', 'caldav_url']):
+        return jsonify({'error': 'Session incomplete - please log in again'}), 401
+    
+    client = CalDAVClient(session['username'], session['password'], 
+                         session['caldav_url'], session.get('server_type', 'generic'))
+    
+    if not client.connect():
+        app.logger.error("CalDAV connection failed")
+        return jsonify({'error': 'CalDAV connection failed'}), 500
+    
+    if not client.select_calendar(calendar_name):
+        app.logger.error(f"Calendar not found: {calendar_name}")
+        return jsonify({'error': f'Calendar "{calendar_name}" not found'}), 500
+    
+    # Update the event
+    success = client.update_event(
+        event_url,
+        data.get('title', ''),
+        data.get('description', ''),
+        start_dt,
+        end_dt
+    )
+    
+    if success:
+        app.logger.info("Event updated successfully")
+        return jsonify({'success': True})
+    else:
+        app.logger.error("Failed to update event")
+        return jsonify({'error': 'Failed to update event'}), 500
+
+@app.route('/api/events/<event_id>', methods=['DELETE'])
+def api_delete_event(event_id):
+    """API endpoint to delete event"""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    app.logger.info(f"Deleting event: {event_id}")
+    
+    # Extract calendar name from event ID
+    if ':' in event_id:
+        calendar_name, uid = event_id.split(':', 1)
+    else:
+        user_prefs = UserPreferences.query.get(session['user_id'])
+        selected_calendars = user_prefs.get_selected_calendars() if user_prefs else []
+        calendar_name = selected_calendars[0] if selected_calendars else None
+        uid = event_id
+    
+    if not calendar_name:
+        return jsonify({'error': 'Cannot determine target calendar'}), 400
+    
+    # Get event URL from request data
+    data = request.get_json() or {}
+    event_url = data.get('url')
+    
+    if not event_url:
+        return jsonify({'error': 'Event URL required for deletion'}), 400
+    
+    # Check CalDAV connection info
+    if not all(key in session for key in ['username', 'password', 'caldav_url']):
+        return jsonify({'error': 'Session incomplete - please log in again'}), 401
+    
+    client = CalDAVClient(session['username'], session['password'], 
+                         session['caldav_url'], session.get('server_type', 'generic'))
+    
+    if not client.connect():
+        app.logger.error("CalDAV connection failed")
+        return jsonify({'error': 'CalDAV connection failed'}), 500
+    
+    if not client.select_calendar(calendar_name):
+        app.logger.error(f"Calendar not found: {calendar_name}")
+        return jsonify({'error': f'Calendar "{calendar_name}" not found'}), 500
+    
+    # Delete the event
+    success = client.delete_event(event_url)
+    
+    if success:
+        app.logger.info("Event deleted successfully")
+        return jsonify({'success': True})
+    else:
+        app.logger.error("Failed to delete event")
+        return jsonify({'error': 'Failed to delete event'}), 500
 
 @app.route('/logout')
 def logout():
