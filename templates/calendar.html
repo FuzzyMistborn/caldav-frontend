@@ -19,21 +19,23 @@
                 </div>
             </div>
             <div class="card-body">
+                <!-- Debug info -->
+                <div id="debugInfo" class="alert alert-info">
+                    <strong>Debug:</strong> Loading calendar...
+                </div>
+                
                 <!-- Collapsible Sidebar -->
                 <div class="collapse mb-3" id="calendarSidebar">
                     <div class="card card-body">
                         <div class="row">
                             <div class="col-md-6">
                                 <h6 class="mb-3">Active Calendars</h6>
-                                <div id="calendarList"></div>
+                                <div id="calendarList">Loading calendars...</div>
                             </div>
                             <div class="col-md-6">
                                 <h6 class="mb-3">Quick Actions</h6>
                                 <button class="btn btn-sm btn-outline-primary w-100 mb-2" onclick="refreshEvents()">
                                     Refresh Events
-                                </button>
-                                <button class="btn btn-sm btn-outline-secondary w-100 mb-2" data-bs-toggle="modal" data-bs-target="#settingsModal">
-                                    Customize Colors
                                 </button>
                             </div>
                         </div>
@@ -41,82 +43,24 @@
                 </div>
                 
                 <!-- Main Calendar -->
-                <div id="calendar"></div>
+                <div id="calendar" style="min-height: 400px; border: 1px solid #ccc;">
+                    <!-- Calendar will load here -->
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Settings Modal -->
-<div class="modal fade" id="settingsModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-cog me-2"></i>Calendar Settings
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body settings-modal-body">
-                <!-- Week Start Setting -->
-                <div class="week-start-setting">
-                    <label for="weekStart" class="form-label">
-                        <i class="fas fa-calendar-week me-2"></i>Week Starts On
-                    </label>
-                    <select class="form-select" id="weekStart">
-                        <option value="0">Sunday</option>
-                        <option value="1">Monday</option>
-                    </select>
-                    <small class="form-text mt-1 d-block">Choose which day your week starts on</small>
-                </div>
-                
-                <!-- Calendar Colors Section -->
-                <div class="mb-3">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <label class="form-label mb-0">
-                            <i class="fas fa-palette me-2"></i>Calendar Colors
-                        </label>
-                        <div class="btn-group btn-group-sm bulk-actions">
-                            <button type="button" class="btn btn-outline-secondary" onclick="resetAllColors()">
-                                <i class="fas fa-undo me-1"></i>Reset All
-                            </button>
-                            <button type="button" class="btn btn-outline-primary" onclick="randomizeColors()">
-                                <i class="fas fa-random me-1"></i>Randomize
-                            </button>
-                        </div>
-                    </div>
-                    <small class="text-muted mb-2 d-block">Customize the color for each calendar</small>
-                    <div id="colorSettings" class="color-settings-grid">
-                        <!-- Color settings will be populated by JavaScript -->
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <i class="fas fa-times me-1"></i>Cancel
-                </button>
-                <button type="button" class="btn btn-primary" id="saveSettingsBtn">
-                    <i class="fas fa-save me-1"></i>Save Settings
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Event Modal -->
+<!-- Simple Event Modal -->
 <div class="modal fade" id="eventModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="eventModalLabel">New Event</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title" id="eventModalLabel">Event</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <form id="eventForm">
-                    <div class="mb-3">
-                        <label for="eventCalendar" class="form-label">Calendar</label>
-                        <select class="form-select" id="eventCalendar"></select>
-                    </div>
                     <div class="mb-3">
                         <label for="eventTitle" class="form-label">Title</label>
                         <input type="text" class="form-control" id="eventTitle" required>
@@ -125,67 +69,21 @@
                         <label for="eventDescription" class="form-label">Description</label>
                         <textarea class="form-control" id="eventDescription" rows="3"></textarea>
                     </div>
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="eventStartDate" class="form-label">Start Date</label>
-                                <input type="date" class="form-control" id="eventStartDate" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="eventStartTime" class="form-label">Start Time</label>
-                                <div class="time-picker-container">
-                                    <input type="time" class="form-control time-input" id="eventStartTime" required>
-                                    <div class="time-picker-overlay" id="startTimePicker">
-                                        <div class="time-picker-grid">
-                                            <select class="form-select time-picker-select" id="startHour"></select>
-                                            <span class="time-picker-label">:</span>
-                                            <select class="form-select time-picker-select" id="startMinute"></select>
-                                            <span class="time-picker-label"></span>
-                                            <select class="form-select time-picker-select" id="startAMPM">
-                                                <option value="AM">AM</option>
-                                                <option value="PM">PM</option>
-                                            </select>
-                                        </div>
-                                        <div class="mt-2 text-end">
-                                            <button type="button" class="btn btn-sm btn-primary" onclick="applyTime('start')">Apply</button>
-                                            <button type="button" class="btn btn-sm btn-secondary" onclick="closeTimePicker('start')">Cancel</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="eventEndDate" class="form-label">End Date</label>
-                                <input type="date" class="form-control" id="eventEndDate" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="eventEndTime" class="form-label">End Time</label>
-                                <div class="time-picker-container">
-                                    <input type="time" class="form-control time-input" id="eventEndTime" required>
-                                    <div class="time-picker-overlay" id="endTimePicker">
-                                        <div class="time-picker-grid">
-                                            <select class="form-select time-picker-select" id="endHour"></select>
-                                            <span class="time-picker-label">:</span>
-                                            <select class="form-select time-picker-select" id="endMinute"></select>
-                                            <span class="time-picker-label"></span>
-                                            <select class="form-select time-picker-select" id="endAMPM">
-                                                <option value="AM">AM</option>
-                                                <option value="PM">PM</option>
-                                            </select>
-                                        </div>
-                                        <div class="mt-2 text-end">
-                                            <button type="button" class="btn btn-sm btn-primary" onclick="applyTime('end')">Apply</button>
-                                            <button type="button" class="btn btn-sm btn-secondary" onclick="closeTimePicker('end')">Cancel</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                    <div class="mb-3">
+                        <label for="eventStartDate" class="form-label">Start Date</label>
+                        <input type="date" class="form-control" id="eventStartDate" required>
                     </div>
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" id="allDayEvent">
-                        <label class="form-check-label" for="allDayEvent">All Day Event</label>
+                    <div class="mb-3">
+                        <label for="eventStartTime" class="form-label">Start Time</label>
+                        <input type="time" class="form-control" id="eventStartTime" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="eventEndDate" class="form-label">End Date</label>
+                        <input type="date" class="form-control" id="eventEndDate" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="eventEndTime" class="form-label">End Time</label>
+                        <input type="time" class="form-control" id="eventEndTime" required>
                     </div>
                     <input type="hidden" id="eventId">
                     <input type="hidden" id="eventUrl">
@@ -193,7 +91,6 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-danger" id="deleteEventBtn" style="display: none;">Delete</button>
                 <button type="button" class="btn btn-primary" id="saveEventBtn">Save Event</button>
             </div>
         </div>
@@ -203,510 +100,107 @@
 
 {% block scripts %}
 <script>
+console.log('Calendar script starting...');
+
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded, initializing calendar...');
+    
+    const debugInfo = document.getElementById('debugInfo');
     const calendarEl = document.getElementById('calendar');
     const calendarListEl = document.getElementById('calendarList');
+    
+    try {
+        // Update debug info
+        debugInfo.innerHTML = '<strong>Debug:</strong> Initializing FullCalendar...';
+        
+        // Check if FullCalendar is loaded
+        if (typeof FullCalendar === 'undefined') {
+            throw new Error('FullCalendar not loaded');
+        }
+        
+        const calendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: 'dayGridMonth',
+            headerToolbar: {
+                left: 'prev,next today',
+                center: 'title',
+                right: 'dayGridMonth,timeGridWeek,timeGridDay'
+            },
+            selectable: true,
+            height: 'auto',
+            events: function(fetchInfo, successCallback, failureCallback) {
+                console.log('Fetching events...', fetchInfo);
+                debugInfo.innerHTML = '<strong>Debug:</strong> Fetching events...';
+                
+                fetch(`/api/events?start=${fetchInfo.startStr}&end=${fetchInfo.endStr}`)
+                    .then(response => {
+                        console.log('Events response:', response.status);
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log('Events data:', data);
+                        if (data.error) {
+                            debugInfo.innerHTML = `<strong>Error:</strong> ${data.error}`;
+                            failureCallback(data.error);
+                        } else {
+                            debugInfo.innerHTML = `<strong>Success:</strong> Loaded ${data.length} events`;
+                            successCallback(data);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Events fetch error:', error);
+                        debugInfo.innerHTML = `<strong>Error:</strong> ${error.message}`;
+                        failureCallback(error);
+                    });
+            },
+            dateClick: function(info) {
+                console.log('Date clicked:', info.dateStr);
+                openEventModal(info.dateStr);
+            },
+            eventClick: function(info) {
+                console.log('Event clicked:', info.event);
+                openEventModal(null, info.event);
+            }
+        });
+
+        calendar.render();
+        debugInfo.innerHTML = '<strong>Success:</strong> Calendar rendered successfully';
+        console.log('Calendar rendered successfully');
+        
+        // Load calendar list
+        loadCalendarList();
+        
+    } catch (error) {
+        console.error('Calendar initialization error:', error);
+        debugInfo.innerHTML = `<strong>Error:</strong> ${error.message}`;
+        calendarEl.innerHTML = `<div class="alert alert-danger">Error initializing calendar: ${error.message}</div>`;
+    }
+    
+    // Simple event modal functionality
     const eventModal = new bootstrap.Modal(document.getElementById('eventModal'));
-    const settingsModal = new bootstrap.Modal(document.getElementById('settingsModal'));
     
-    let userSettings = { week_start: 0, calendar_colors: {} };
-    
-    const defaultCalendarColors = [
-        '#3788d8', '#28a745', '#dc3545', '#ffc107', '#6f42c1',
-        '#fd7e14', '#20c997', '#e83e8c', '#6c757d', '#17a2b8'
-    ];
-
-    const calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: 'dayGridMonth',
-        firstDay: 0,
-        headerToolbar: {
-            left: 'prev,next today',
-            center: 'title',
-            right: 'dayGridMonth,timeGridWeek,timeGridDay'
-        },
-        selectable: true,
-        height: '80vh',
-        events: function(fetchInfo, successCallback, failureCallback) {
-            fetch(`/api/events?start=${fetchInfo.startStr}&end=${fetchInfo.endStr}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        failureCallback(data.error);
-                    } else {
-                        successCallback(data);
-                    }
-                })
-                .catch(error => {
-                    failureCallback(error);
-                });
-        },
-        dateClick: function(info) {
-            openEventModal(info.dateStr);
-        },
-        eventClick: function(info) {
-            openEventModal(null, info.event);
-        }
-    });
-
-    calendar.render();
-    
-    // Initialize time pickers
-    initializeTimePickers();
-    
-    // Load calendar list
-    loadCalendarList();
-    loadSettings();
-
-    function initializeTimePickers() {
-        // Populate hour options (1-12)
-        ['startHour', 'endHour'].forEach(id => {
-            const select = document.getElementById(id);
-            for (let i = 1; i <= 12; i++) {
-                const option = document.createElement('option');
-                option.value = i.toString().padStart(2, '0');
-                option.textContent = i.toString();
-                select.appendChild(option);
-            }
-        });
-
-        // Populate minute options (00-59, every 5 minutes)
-        ['startMinute', 'endMinute'].forEach(id => {
-            const select = document.getElementById(id);
-            for (let i = 0; i < 60; i += 5) {
-                const option = document.createElement('option');
-                option.value = i.toString().padStart(2, '0');
-                option.textContent = i.toString().padStart(2, '0');
-                select.appendChild(option);
-            }
-        });
-
-        // Add click handlers for time inputs
-        document.getElementById('eventStartTime').addEventListener('click', function() {
-            showTimePicker('start', this.value);
-        });
-
-        document.getElementById('eventEndTime').addEventListener('click', function() {
-            showTimePicker('end', this.value);
-        });
-
-        // Close time pickers when clicking outside
-        document.addEventListener('click', function(e) {
-            if (!e.target.closest('.time-picker-container')) {
-                closeAllTimePickers();
-            }
-        });
-    }
-
-    function showTimePicker(type, currentValue) {
-        closeAllTimePickers();
-        
-        const picker = document.getElementById(type + 'TimePicker');
-        const hourSelect = document.getElementById(type + 'Hour');
-        const minuteSelect = document.getElementById(type + 'Minute');
-        const ampmSelect = document.getElementById(type + 'AMPM');
-        
-        // Parse current time or set defaults
-        let hour = 9, minute = 0, ampm = 'AM';
-        
-        if (currentValue) {
-            const [h, m] = currentValue.split(':');
-            const hour24 = parseInt(h);
-            minute = parseInt(m);
-            
-            if (hour24 === 0) {
-                hour = 12;
-                ampm = 'AM';
-            } else if (hour24 < 12) {
-                hour = hour24;
-                ampm = 'AM';
-            } else if (hour24 === 12) {
-                hour = 12;
-                ampm = 'PM';
-            } else {
-                hour = hour24 - 12;
-                ampm = 'PM';
-            }
-        }
-        
-        hourSelect.value = hour.toString().padStart(2, '0');
-        minuteSelect.value = Math.round(minute / 5) * 5;
-        ampmSelect.value = ampm;
-        
-        picker.style.display = 'block';
-    }
-
-    function closeAllTimePickers() {
-        document.querySelectorAll('.time-picker-overlay').forEach(picker => {
-            picker.style.display = 'none';
-        });
-    }
-
-    window.closeTimePicker = function(type) {
-        document.getElementById(type + 'TimePicker').style.display = 'none';
-    };
-
-    window.applyTime = function(type) {
-        const hourSelect = document.getElementById(type + 'Hour');
-        const minuteSelect = document.getElementById(type + 'Minute');
-        const ampmSelect = document.getElementById(type + 'AMPM');
-        
-        let hour = parseInt(hourSelect.value);
-        const minute = parseInt(minuteSelect.value);
-        const ampm = ampmSelect.value;
-        
-        // Convert to 24-hour format
-        if (ampm === 'AM' && hour === 12) {
-            hour = 0;
-        } else if (ampm === 'PM' && hour !== 12) {
-            hour += 12;
-        }
-        
-        const timeString = hour.toString().padStart(2, '0') + ':' + minute.toString().padStart(2, '0');
-        document.getElementById('event' + type.charAt(0).toUpperCase() + type.slice(1) + 'Time').value = timeString;
-        
-        closeTimePicker(type);
-    };
-
-    function loadSettings() {
-        fetch('/api/settings')
-            .then(response => response.json())
-            .then(data => {
-                userSettings = data;
-                calendar.setOption('firstDay', data.week_start || 0);
-                document.getElementById('weekStart').value = data.week_start || 0;
-            })
-            .catch(error => {
-                console.error('Error loading settings:', error);
-            });
-    }
-
-    function loadCalendarList() {
-        fetch('/api/calendar-selection')
-            .then(response => response.json())
-            .then(data => {
-                if (data.calendars && data.selected_calendars) {
-                    userSettings.calendar_colors = data.calendar_colors || {};
-                    updateCalendarSidebar(data.selected_calendars, data.selected_calendars);
-                    updateColorSettings(data.calendars);
-                }
-            })
-            .catch(error => {
-                console.error('Error loading calendar list:', error);
-            });
-    }
-
-    function getCalendarColor(calName, index) {
-        return userSettings.calendar_colors[calName] || defaultCalendarColors[index % defaultCalendarColors.length];
-    }
-
-    function updateCalendarSidebar(calendars, selectedCalendars) {
-        let html = '';
-        calendars.forEach((calInfo, index) => {
-            const calName = Array.isArray(calInfo) ? calInfo[0] : calInfo;
-            const color = getCalendarColor(calName, index);
-            const isSelected = selectedCalendars.includes(calName);
-            
-            html += `
-                <div class="form-check mb-2">
-                    <input class="form-check-input calendar-toggle" type="checkbox" 
-                           value="${calName}" id="cal_${index}" ${isSelected ? 'checked' : ''}
-                           data-color="${color}">
-                    <label class="form-check-label d-flex align-items-center" for="cal_${index}">
-                        <span class="badge me-2" style="background-color: ${color}; width: 16px; height: 16px; border-radius: 50%;">&nbsp;</span>
-                        <span class="flex-grow-1">${calName}</span>
-                        ${isSelected ? '<i class="fas fa-eye text-success ms-1"></i>' : '<i class="fas fa-eye-slash text-muted ms-1"></i>'}
-                    </label>
-                </div>
-            `;
-        });
-        
-        calendarListEl.innerHTML = html;
-        
-        // Add event listeners
-        document.querySelectorAll('.calendar-toggle').forEach(checkbox => {
-            checkbox.addEventListener('change', function() {
-                updateCalendarSelection();
-                updateSidebarButtonText();
-            });
-        });
-        
-        updateSidebarButtonText();
-        updateEventCalendarSelector(calendars);
-    }
-
-    function updateSidebarButtonText() {
-        const selectedCount = document.querySelectorAll('.calendar-toggle:checked').length;
-        const totalCount = document.querySelectorAll('.calendar-toggle').length;
-        const sidebarToggle = document.getElementById('sidebarToggle');
-        
-        if (sidebarToggle) {
-            sidebarToggle.innerHTML = `Calendars (${selectedCount}/${totalCount})`;
-        }
-    }
-
-    function updateColorSettings(calendars) {
-        const colorSettingsEl = document.getElementById('colorSettings');
-        let html = '';
-        
-        calendars.forEach((calInfo, index) => {
-            const calName = Array.isArray(calInfo) ? calInfo[0] : calInfo;
-            const currentColor = getCalendarColor(calName, index);
-            
-            html += `
-                <div class="color-setting-item">
-                    <div class="calendar-name-label" title="${calName}">${calName}</div>
-                    <div class="color-input-wrapper">
-                        <input type="color" class="form-control form-control-color color-picker" 
-                               value="${currentColor}" data-calendar="${calName}" 
-                               onchange="updateCalendarColor('${calName}', this.value)"
-                               title="Click to change color">
-                        <button type="button" class="btn btn-sm btn-outline-secondary reset-color-btn" 
-                                onclick="resetColor('${calName}', ${index})" 
-                                title="Reset ${calName} to default color">
-                            <i class="fas fa-undo"></i> Reset
-                        </button>
-                    </div>
-                </div>
-            `;
-        });
-        
-        colorSettingsEl.innerHTML = html;
-    }
-
-    function updateCalendarColorBadge(calName, color) {
-        const badges = document.querySelectorAll('.calendar-color-badge');
-        badges.forEach(badge => {
-            const checkbox = badge.closest('.form-check').querySelector('input');
-            if (checkbox && checkbox.value === calName) {
-                badge.style.backgroundColor = color;
-            }
-        });
-    }
-
-    function updateEventCalendarSelector(calendars) {
-        const selector = document.getElementById('eventCalendar');
-        selector.innerHTML = '';
-        calendars.forEach((calInfo) => {
-            const calName = Array.isArray(calInfo) ? calInfo[0] : calInfo;
-            const option = document.createElement('option');
-            option.value = calName;
-            option.textContent = calName;
-            selector.appendChild(option);
-        });
-    }
-
-    function updateCalendarSelection() {
-        const selected = Array.from(document.querySelectorAll('.calendar-toggle:checked'))
-                             .map(cb => cb.value);
-        
-        fetch('/api/calendar-selection', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ calendars: selected })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                eventModal.hide();
-                calendar.refetchEvents();
-                showToast('Event deleted successfully!', 'success');
-            } else {
-                showToast(`Error deleting event: ${data.error}`, 'error');
-            }
-        })
-        .catch(error => {
-            console.error('Error deleting event:', error);
-            showToast('Error deleting event. Please try again.', 'error');
-        })
-        .finally(() => {
-            // Re-enable delete button
-            deleteBtn.disabled = false;
-            deleteBtn.textContent = originalText;
-        });
-    });
-
-    // All-day event toggle
-    document.getElementById('allDayEvent').addEventListener('change', function() {
-        const timeInputs = document.querySelectorAll('#eventStartTime, #eventEndTime');
-        const timeLabels = document.querySelectorAll('label[for="eventStartTime"], label[for="eventEndTime"]');
-        
-        if (this.checked) {
-            timeInputs.forEach(input => {
-                input.style.display = 'none';
-                input.required = false;
-            });
-            timeLabels.forEach(label => {
-                label.style.display = 'none';
-            });
-        } else {
-            timeInputs.forEach(input => {
-                input.style.display = 'block';
-                input.required = true;
-            });
-            timeLabels.forEach(label => {
-                label.style.display = 'block';
-            });
-        }
-    });
-
-    // Toast notification function
-    function showToast(message, type = 'info') {
-        // Create toast element if it doesn't exist
-        let toastContainer = document.getElementById('toastContainer');
-        if (!toastContainer) {
-            toastContainer = document.createElement('div');
-            toastContainer.id = 'toastContainer';
-            toastContainer.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                z-index: 9999;
-            `;
-            document.body.appendChild(toastContainer);
-        }
-
-        // Create toast
-        const toast = document.createElement('div');
-        toast.className = `alert alert-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'} alert-dismissible fade show`;
-        toast.style.cssText = `
-            margin-bottom: 10px;
-            min-width: 300px;
-        `;
-        toast.innerHTML = `
-            ${message}
-            <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>
-        `;
-
-        toastContainer.appendChild(toast);
-
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-            if (toast.parentElement) {
-                toast.remove();
-            }
-        }, 5000);
-    }
-    
-    window.refreshEvents = function() {
-        calendar.refetchEvents();
-    };
-
-    window.resetColor = function(calName, index) {
-        const defaultColor = defaultCalendarColors[index % defaultCalendarColors.length];
-        delete userSettings.calendar_colors[calName];
-        const colorPicker = document.querySelector(`input[data-calendar="${calName}"]`);
-        if (colorPicker) colorPicker.value = defaultColor;
-        updateCalendarColorBadge(calName, defaultColor);
-    };
-
-    window.updateCalendarColor = function(calName, color) {
-        userSettings.calendar_colors[calName] = color;
-        updateCalendarColorBadge(calName, color);
-    };
-
-    window.resetAllColors = function() {
-        if (confirm('Reset all calendar colors to their defaults?')) {
-            userSettings.calendar_colors = {};
-            loadCalendarList();
-        }
-    };
-
-    window.randomizeColors = function() {
-        if (confirm('Assign random colors to all calendars?')) {
-            const availableColors = [
-                '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
-                '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
-                '#F8C471', '#82E0AA', '#F1948A', '#85CDFD', '#FABE58'
-            ];
-            
-            document.querySelectorAll('.color-picker').forEach((picker, index) => {
-                const randomColor = availableColors[index % availableColors.length];
-                picker.value = randomColor;
-                updateCalendarColor(picker.dataset.calendar, randomColor);
-            });
-        }
-    };
-});
-</script>
-{% endblock %}data.success) {
-                calendar.refetchEvents();
-            }
-        })
-        .catch(error => {
-            console.error('Error updating calendar selection:', error);
-        });
-    }
-
     function openEventModal(dateStr, event = null) {
-        // Reset form
-        document.getElementById('eventForm').reset();
-        document.getElementById('eventId').value = '';
-        document.getElementById('eventUrl').value = '';
+        console.log('Opening event modal:', { dateStr, event });
         
         if (event) {
-            // Editing existing event
             document.getElementById('eventModalLabel').textContent = 'Edit Event';
             document.getElementById('eventTitle').value = event.title || '';
-            document.getElementById('eventDescription').value = event.extendedProps.description || '';
-            document.getElementById('deleteEventBtn').style.display = 'inline-block';
-            
-            // Set calendar
-            if (event.extendedProps.calendar_name) {
-                document.getElementById('eventCalendar').value = event.extendedProps.calendar_name;
-            }
-            
-            // Set event ID and URL for updates
+            document.getElementById('eventDescription').value = event.extendedProps?.description || '';
             document.getElementById('eventId').value = event.id || '';
-            document.getElementById('eventUrl').value = event.extendedProps.url || event.url || '';
+            document.getElementById('eventUrl').value = event.extendedProps?.url || '';
             
             // Parse dates
             const startDate = new Date(event.start);
             const endDate = new Date(event.end || event.start);
             
-            // Check if all-day event (simple heuristic)
-            const isAllDay = event.allDay || 
-                            (startDate.getHours() === 0 && startDate.getMinutes() === 0 && 
-                             endDate.getHours() === 23 && endDate.getMinutes() === 59);
-            
-            document.getElementById('allDayEvent').checked = isAllDay;
-            
-            // Set dates
             document.getElementById('eventStartDate').value = startDate.toISOString().split('T')[0];
             document.getElementById('eventEndDate').value = endDate.toISOString().split('T')[0];
-            
-            if (!isAllDay) {
-                // Set times
-                document.getElementById('eventStartTime').value = 
-                    startDate.toTimeString().slice(0, 5);
-                document.getElementById('eventEndTime').value = 
-                    endDate.toTimeString().slice(0, 5);
-            }
-            
-            // Toggle time inputs based on all-day status
-            const timeInputs = document.querySelectorAll('#eventStartTime, #eventEndTime');
-            const timeLabels = document.querySelectorAll('label[for="eventStartTime"], label[for="eventEndTime"]');
-            
-            if (isAllDay) {
-                timeInputs.forEach(input => {
-                    input.style.display = 'none';
-                    input.required = false;
-                });
-                timeLabels.forEach(label => {
-                    label.style.display = 'none';
-                });
-            } else {
-                timeInputs.forEach(input => {
-                    input.style.display = 'block';
-                    input.required = true;
-                });
-                timeLabels.forEach(label => {
-                    label.style.display = 'block';
-                });
-            }
+            document.getElementById('eventStartTime').value = startDate.toTimeString().slice(0, 5);
+            document.getElementById('eventEndTime').value = endDate.toTimeString().slice(0, 5);
         } else {
-            // Creating new event
             document.getElementById('eventModalLabel').textContent = 'New Event';
-            document.getElementById('deleteEventBtn').style.display = 'none';
+            document.getElementById('eventForm').reset();
+            document.getElementById('eventId').value = '';
+            document.getElementById('eventUrl').value = '';
             
             if (dateStr) {
                 document.getElementById('eventStartDate').value = dateStr;
@@ -714,161 +208,101 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('eventStartTime').value = '09:00';
                 document.getElementById('eventEndTime').value = '10:00';
             }
-            
-            // Set default calendar to first selected one
-            const calendarSelector = document.getElementById('eventCalendar');
-            if (calendarSelector.options.length > 0) {
-                calendarSelector.selectedIndex = 0;
-            }
         }
         
         eventModal.show();
     }
-
-    // Save settings
-    document.getElementById('saveSettingsBtn').addEventListener('click', function() {
-        const weekStart = parseInt(document.getElementById('weekStart').value);
-        
-        fetch('/api/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                week_start: weekStart,
-                calendar_colors: userSettings.calendar_colors
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                calendar.setOption('firstDay', weekStart);
-                settingsModal.hide();
-                calendar.refetchEvents();
-                loadCalendarList();
-            }
-        });
-    });
-
+    
     // Save event functionality
     document.getElementById('saveEventBtn').addEventListener('click', function() {
+        console.log('Save event clicked');
+        
         const eventId = document.getElementById('eventId').value;
-        const eventUrl = document.getElementById('eventUrl').value;
         const title = document.getElementById('eventTitle').value;
         const description = document.getElementById('eventDescription').value;
         const startDate = document.getElementById('eventStartDate').value;
         const startTime = document.getElementById('eventStartTime').value;
         const endDate = document.getElementById('eventEndDate').value;
         const endTime = document.getElementById('eventEndTime').value;
-        const allDay = document.getElementById('allDayEvent').checked;
-        const calendarName = document.getElementById('eventCalendar').value;
-
-        // Validation
+        
         if (!title.trim()) {
             alert('Please enter an event title');
             return;
         }
-
-        if (!startDate || !endDate) {
-            alert('Please select start and end dates');
-            return;
-        }
-
-        // Build start and end datetime strings
-        let startDateTime, endDateTime;
         
-        if (allDay) {
-            startDateTime = startDate + 'T00:00:00';
-            endDateTime = endDate + 'T23:59:59';
-        } else {
-            if (!startTime || !endTime) {
-                alert('Please select start and end times');
-                return;
-            }
-            startDateTime = startDate + 'T' + startTime + ':00';
-            endDateTime = endDate + 'T' + endTime + ':00';
-        }
-
-        // Prepare event data
         const eventData = {
             title: title,
             description: description,
-            start: startDateTime,
-            end: endDateTime,
-            calendar_name: calendarName
+            start: `${startDate}T${startTime}:00`,
+            end: `${endDate}T${endTime}:00`
         };
-
-        // Add URL for updates
-        if (eventUrl) {
-            eventData.url = eventUrl;
+        
+        if (document.getElementById('eventUrl').value) {
+            eventData.url = document.getElementById('eventUrl').value;
         }
-
-        // Determine if this is create or update
+        
         const isUpdate = eventId && eventId.trim() !== '';
         const method = isUpdate ? 'PUT' : 'POST';
         const url = isUpdate ? `/api/events/${eventId}` : '/api/events';
-
-        // Disable save button during request
-        const saveBtn = document.getElementById('saveEventBtn');
-        const originalText = saveBtn.textContent;
-        saveBtn.disabled = true;
-        saveBtn.textContent = 'Saving...';
-
-        // Make API request
+        
+        console.log('Saving event:', { method, url, eventData });
+        
         fetch(url, {
             method: method,
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(eventData)
         })
         .then(response => response.json())
         .then(data => {
+            console.log('Save response:', data);
             if (data.success) {
                 eventModal.hide();
                 calendar.refetchEvents();
-                showToast('Event saved successfully!', 'success');
+                alert('Event saved successfully!');
             } else {
-                showToast(`Error saving event: ${data.error}`, 'error');
+                alert(`Error: ${data.error}`);
             }
         })
         .catch(error => {
-            console.error('Error saving event:', error);
-            showToast('Error saving event. Please try again.', 'error');
-        })
-        .finally(() => {
-            // Re-enable save button
-            saveBtn.disabled = false;
-            saveBtn.textContent = originalText;
+            console.error('Save error:', error);
+            alert('Error saving event');
         });
     });
+    
+    function loadCalendarList() {
+        console.log('Loading calendar list...');
+        
+        fetch('/api/calendar-selection')
+            .then(response => response.json())
+            .then(data => {
+                console.log('Calendar list data:', data);
+                if (data.calendars) {
+                    let html = '';
+                    data.calendars.forEach((cal, index) => {
+                        const calName = Array.isArray(cal) ? cal[0] : cal;
+                        html += `<div class="mb-1">${calName}</div>`;
+                    });
+                    calendarListEl.innerHTML = html;
+                } else {
+                    calendarListEl.innerHTML = '<div class="text-muted">No calendars found</div>';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading calendars:', error);
+                calendarListEl.innerHTML = '<div class="text-danger">Error loading calendars</div>';
+            });
+    }
+    
+    // Global functions
+    window.refreshEvents = function() {
+        console.log('Refreshing events...');
+        calendar.refetchEvents();
+    };
+    
+    // Make openEventModal global for debugging
+    window.openEventModal = openEventModal;
+});
 
-    // Delete event functionality
-    document.getElementById('deleteEventBtn').addEventListener('click', function() {
-        const eventId = document.getElementById('eventId').value;
-        const eventUrl = document.getElementById('eventUrl').value;
-        const title = document.getElementById('eventTitle').value;
-
-        if (!eventId || !eventUrl) {
-            alert('Cannot delete event: missing event information');
-            return;
-        }
-
-        if (!confirm(`Are you sure you want to delete "${title}"?`)) {
-            return;
-        }
-
-        // Disable delete button during request
-        const deleteBtn = document.getElementById('deleteEventBtn');
-        const originalText = deleteBtn.textContent;
-        deleteBtn.disabled = true;
-        deleteBtn.textContent = 'Deleting...';
-
-        fetch(`/api/events/${eventId}`, {
-            method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ url: eventUrl })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (
+console.log('Calendar script loaded');
+</script>
+{% endblock %}
