@@ -694,10 +694,20 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Event handlers
+    // Event handlers - moved to after all functions are defined
     document.getElementById('saveSettingsBtn').addEventListener('click', function() {
+        console.log('Save Settings button clicked');
+        
         const weekStart = parseInt(document.getElementById('weekStart').value);
         const defaultCalendar = document.getElementById('defaultCalendar').value;
+        
+        console.log('Settings to save:', { weekStart, defaultCalendar, calendar_colors: userSettings.calendar_colors });
+        
+        // Disable button during save
+        const saveBtn = this;
+        const originalText = saveBtn.textContent;
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
         
         fetch('/api/settings', {
             method: 'POST',
@@ -708,8 +718,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 calendar_colors: userSettings.calendar_colors
             })
         })
-        .then(response => response.json())
+        .then(response => {
+            console.log('Settings save response status:', response.status);
+            return response.json();
+        })
         .then(data => {
+            console.log('Settings save response data:', data);
             if (data.success) {
                 userSettings.default_calendar = defaultCalendar;
                 calendar.setOption('firstDay', weekStart);
@@ -717,7 +731,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 calendar.refetchEvents();
                 loadCalendarList();
                 showToast('Settings saved successfully!', 'success');
+            } else {
+                showToast(`Error saving settings: ${data.error || 'Unknown error'}`, 'error');
             }
+        })
+        .catch(error => {
+            console.error('Error saving settings:', error);
+            showToast('Error saving settings. Please try again.', 'error');
+        })
+        .finally(() => {
+            // Re-enable button
+            saveBtn.disabled = false;
+            saveBtn.textContent = originalText;
         });
     });
 
