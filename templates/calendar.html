@@ -298,41 +298,64 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add additional debugging for selection
     let isSelecting = false;
     let selectionStart = null;
-    let lastHoveredDate = null;
+    let selectionEnd = null;
     
-    // Add mouse event listeners as fallback for multi-day selection
+    // Use event delegation for better performance and reliability
     calendarEl.addEventListener('mousedown', function(e) {
         const dayEl = e.target.closest('.fc-daygrid-day');
         if (dayEl && e.button === 0) { // Left mouse button
             console.log('Mouse down on day element');
             isSelecting = true;
             selectionStart = dayEl.getAttribute('data-date');
-            lastHoveredDate = selectionStart; // Initialize with start date
+            selectionEnd = selectionStart; // Initialize end with start
             console.log('Selection started:', selectionStart);
             e.preventDefault(); // Prevent text selection
+            
+            // Add visual feedback
+            dayEl.classList.add('selecting');
         }
     });
     
-    calendarEl.addEventListener('mouseover', function(e) {
-        if (isSelecting) {
-            const dayEl = e.target.closest('.fc-daygrid-day');
-            if (dayEl) {
-                const currentDate = dayEl.getAttribute('data-date');
-                if (currentDate) {
-                    lastHoveredDate = currentDate; // Track the last valid date we hovered over
-                    console.log('Selection dragging over:', currentDate);
-                }
+    // Use mouseenter for more reliable day detection
+    calendarEl.addEventListener('mouseenter', function(e) {
+        if (isSelecting && e.target.matches('.fc-daygrid-day')) {
+            const currentDate = e.target.getAttribute('data-date');
+            if (currentDate) {
+                selectionEnd = currentDate;
+                console.log('Selection entered day:', currentDate);
+                
+                // Remove previous selection classes
+                document.querySelectorAll('.fc-daygrid-day.selecting').forEach(el => {
+                    el.classList.remove('selecting');
+                });
+                
+                // Add visual feedback for current selection
+                const startDateObj = new Date(selectionStart);
+                const endDateObj = new Date(currentDate);
+                const actualStart = startDateObj <= endDateObj ? startDateObj : endDateObj;
+                const actualEnd = startDateObj <= endDateObj ? endDateObj : startDateObj;
+                
+                // Highlight the range
+                document.querySelectorAll('.fc-daygrid-day').forEach(dayEl => {
+                    const dayDate = new Date(dayEl.getAttribute('data-date'));
+                    if (dayDate >= actualStart && dayDate <= actualEnd) {
+                        dayEl.classList.add('selecting');
+                    }
+                });
             }
         }
-    });
+    }, true); // Use capture phase
     
     calendarEl.addEventListener('mouseup', function(e) {
         if (isSelecting) {
-            // Use the last hovered date as the end date
-            const selectionEnd = lastHoveredDate || selectionStart;
-            console.log('Selection ended:', selectionEnd, '(using lastHoveredDate)');
+            console.log('Selection ended:', selectionEnd, '(tracked during drag)');
             
-            if (selectionStart) {
+            // Remove visual feedback
+            document.querySelectorAll('.fc-daygrid-day.selecting').forEach(el => {
+                el.classList.remove('selecting');
+            });
+            
+            if (selectionStart && selectionEnd) {
                 const startDate = new Date(selectionStart);
                 const endDate = new Date(selectionEnd);
                 
@@ -357,7 +380,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             isSelecting = false;
             selectionStart = null;
-            lastHoveredDate = null;
+            selectionEnd = null;
         }
     });
     
@@ -365,9 +388,15 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('mouseup', function(e) {
         if (isSelecting) {
             console.log('Mouse up outside calendar, ending selection');
+            
+            // Remove visual feedback
+            document.querySelectorAll('.fc-daygrid-day.selecting').forEach(el => {
+                el.classList.remove('selecting');
+            });
+            
             isSelecting = false;
             selectionStart = null;
-            lastHoveredDate = null;
+            selectionEnd = null;
         }
     });
     
