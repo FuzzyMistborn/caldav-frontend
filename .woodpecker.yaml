@@ -6,7 +6,7 @@ steps:
         from_secret: ghcr_pass
     commands:
       - docker login ghcr.io -u fuzzymistborn -p $ghcr_pass
-      - docker build -t ghcr.io/fuzzymistborn/caldav-frontend:latest .
+      - docker build -t ghcr.io/fuzzymistborn/caldav-frontend:latest .  --no-cache
       - docker push --all-tags ghcr.io/fuzzymistborn/caldav-frontend
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
