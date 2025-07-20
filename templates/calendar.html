@@ -338,10 +338,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('Starting time selection...');
                 isTimeSelecting = true;
                 
-                // Get click position and calculate time
-                const rect = timeGridEl.getBoundingClientRect();
-                const clickY = e.clientY;
-                
                 // Find the column (day)
                 const col = e.target.closest('.fc-timegrid-col');
                 const dayDate = col ? col.getAttribute('data-date') : null;
@@ -351,50 +347,68 @@ document.addEventListener('DOMContentLoaded', function() {
                     const timeInfo = getTimeFromPosition(e, currentView);
                     console.log('Time selection start:', { dayDate, timeInfo });
                     
-                    timeSelectionStart = {
-                        date: dayDate,
-                        time: timeInfo.time,
-                        datetime: timeInfo.datetime,
-                        element: timeGridEl
-                    };
-                    timeSelectionEnd = timeSelectionStart;
-                    e.preventDefault();
-                    console.log('Time selection initialized');
+                    if (timeInfo) {
+                        timeSelectionStart = {
+                            date: dayDate,
+                            time: timeInfo.time,
+                            datetime: timeInfo.datetime,
+                            element: timeGridEl
+                        };
+                        timeSelectionEnd = timeSelectionStart;
+                        e.preventDefault();
+                        console.log('Time selection initialized with:', timeSelectionStart);
+                    } else {
+                        console.log('Failed to get time info');
+                        isTimeSelecting = false;
+                    }
+                } else {
+                    console.log('No day date found');
+                    isTimeSelecting = false;
                 }
             }
         }
     });
     
     function getTimeFromPosition(e, view) {
-        // Get the time grid element
-        const timeCols = document.querySelector('.fc-timegrid-cols');
-        if (!timeCols) return null;
-        
-        const rect = timeCols.getBoundingClientRect();
-        const relativeY = e.clientY - rect.top;
-        
-        // Get scroll position
-        const scrollEl = document.querySelector('.fc-scroller');
-        const scrollTop = scrollEl ? scrollEl.scrollTop : 0;
-        const adjustedY = relativeY + scrollTop;
-        
-        // Calculate time (assuming 24 hours * slot height)
-        const slotHeight = 24; // Approximate slot height in pixels
-        const totalHeight = 24 * slotHeight;
-        const timeRatio = Math.max(0, Math.min(1, adjustedY / totalHeight));
-        
-        const totalMinutes = timeRatio * 24 * 60;
-        const hours = Math.floor(totalMinutes / 60);
-        const minutes = Math.floor((totalMinutes % 60) / 15) * 15; // Round to 15-minute intervals
-        
-        const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-        const datetime = new Date();
-        datetime.setHours(hours, minutes, 0, 0);
-        
-        return {
-            time: timeString,
-            datetime: datetime
-        };
+        try {
+            // Get the time grid element
+            const timeCols = document.querySelector('.fc-timegrid-cols');
+            if (!timeCols) {
+                console.log('No timegrid cols found');
+                return null;
+            }
+            
+            const rect = timeCols.getBoundingClientRect();
+            const relativeY = e.clientY - rect.top;
+            
+            // Get scroll position
+            const scrollEl = document.querySelector('.fc-scroller');
+            const scrollTop = scrollEl ? scrollEl.scrollTop : 0;
+            const adjustedY = relativeY + scrollTop;
+            
+            console.log('Position calculation:', { relativeY, scrollTop, adjustedY, rectHeight: rect.height });
+            
+            // Calculate time (assuming each hour is roughly rect.height/24)
+            const hourHeight = rect.height / 24; // Height per hour
+            const totalHours = Math.max(0, Math.min(24, adjustedY / hourHeight));
+            
+            const hours = Math.floor(totalHours);
+            const minutes = Math.floor((totalHours % 1) * 4) * 15; // Round to 15-minute intervals
+            
+            const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+            const datetime = new Date();
+            datetime.setHours(hours, minutes, 0, 0);
+            
+            console.log('Calculated time:', { hours, minutes, timeString, totalHours });
+            
+            return {
+                time: timeString,
+                datetime: datetime
+            };
+        } catch (error) {
+            console.error('Error calculating time:', error);
+            return null;
+        }
     }
     
     calendarEl.addEventListener('mousemove', function(e) {
@@ -500,18 +514,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 const startTime = timeSelectionStart.time;
                 const endTime = timeSelectionEnd.time;
                 
-                // Ensure end time is after start time
-                const startDateTime = new Date(`${startDate}T${startTime}`);
-                const endDateTime = new Date(`${endDate}T${endTime}`);
+                // Ensure end time is after start time (add 1 hour minimum if same time)
+                let startDateTime = new Date(`${startDate}T${startTime}`);
+                let endDateTime = new Date(`${endDate}T${endTime}`);
+                
+                // If end is same as start, add 1 hour
+                if (endDateTime.getTime() === startDateTime.getTime()) {
+                    endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000);
+                }
                 
                 // If end is before start, swap them
-                const actualStart = startDateTime <= endDateTime ? startDateTime : endDateTime;
-                const actualEnd = startDateTime <= endDateTime ? endDateTime : startDateTime;
+                if (endDateTime < startDateTime) {
+                    [startDateTime, endDateTime] = [endDateTime, startDateTime];
+                }
                 
-                const finalStartDate = actualStart.toISOString().split('T')[0];
-                const finalEndDate = actualEnd.toISOString().split('T')[0];
-                const finalStartTime = actualStart.toTimeString().slice(0, 5);
-                const finalEndTime = actualEnd.toTimeString().slice(0, 5);
+                const finalStartDate = startDateTime.toISOString().split('T')[0];
+                const finalEndDate = endDateTime.toISOString().split('T')[0];
+                const finalStartTime = startDateTime.toTimeString().slice(0, 5);
+                const finalEndTime = endDateTime.toTimeString().slice(0, 5);
                 
                 const isMultiDay = finalStartDate !== finalEndDate;
                 
@@ -531,6 +551,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     isMultiDay: isMultiDay,
                     isTimed: true
                 });
+            } else {
+                console.log('Missing selection start or end data');
             }
             
             isTimeSelecting = false;
