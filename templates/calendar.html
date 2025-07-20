@@ -1232,6 +1232,21 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load calendar list and settings
     loadCalendarList();
     loadSettings();
+    
+    // Add session check
+    console.log('Checking session status...');
+    fetch('/debug')
+        .then(response => response.json())
+        .then(data => {
+            console.log('Debug info:', data);
+            if (!data.session_keys || data.session_keys.length === 0) {
+                console.warn('No session detected - user may need to log in');
+                calendarListEl.innerHTML = '<div class="text-warning">Not logged in - <a href="/login">Please log in</a></div>';
+            }
+        })
+        .catch(error => {
+            console.error('Error checking debug info:', error);
+        });
 
     function loadSettings() {
         fetch('/api/settings')
@@ -1254,30 +1269,43 @@ document.addEventListener('DOMContentLoaded', function() {
     function loadCalendarList() {
         console.log('loadCalendarList called');
         
+        // Show loading state with more info
+        calendarListEl.innerHTML = '<div class="text-info">Loading calendars... (checking API)</div>';
+        
         fetch('/api/calendar-selection')
             .then(response => {
                 console.log('Calendar selection response status:', response.status);
+                console.log('Calendar selection response headers:', response.headers);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 return response.json();
             })
             .then(data => {
                 console.log('Calendar selection data:', data);
                 
-                if (data.calendars && data.selected_calendars) {
+                if (data.error) {
+                    console.error('API returned error:', data.error);
+                    calendarListEl.innerHTML = `<div class="text-danger">API Error: ${data.error}</div>`;
+                    return;
+                }
+                
+                if (data.calendars && Array.isArray(data.calendars)) {
+                    console.log('Found calendars:', data.calendars.length);
                     userSettings.calendar_colors = data.calendar_colors || {};
-                    updateCalendarSidebar(data.calendars, data.selected_calendars);
+                    updateCalendarSidebar(data.calendars, data.selected_calendars || []);
                     updateColorSettings(data.calendars);
                     updateEventCalendarSelector(data.calendars);
-                } else if (data.error) {
-                    console.error('API returned error:', data.error);
-                    calendarListEl.innerHTML = `<div class="text-danger">Error: ${data.error}</div>`;
                 } else {
-                    console.warn('Unexpected data structure:', data);
-                    calendarListEl.innerHTML = '<div class="text-warning">No calendar data received</div>';
+                    console.warn('No calendars array found in response:', data);
+                    calendarListEl.innerHTML = '<div class="text-warning">No calendars found in response</div>';
                 }
             })
             .catch(error => {
                 console.error('Error loading calendar list:', error);
-                calendarListEl.innerHTML = '<div class="text-danger">Error loading calendars</div>';
+                calendarListEl.innerHTML = `<div class="text-danger">Network Error: ${error.message}<br><small>Check browser console for details</small></div>`;
             });
     }
 
