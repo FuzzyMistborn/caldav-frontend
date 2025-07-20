@@ -201,9 +201,9 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         selectable: true,
         height: '80vh',
-        // Display all-day events at the top
-        dayMaxEvents: false,
-        dayMaxEventRows: false,
+        // Better all-day event display
+        dayMaxEvents: true,
+        dayMaxEventRows: 3,
         moreLinkClick: 'popover',
         eventOrder: function(a, b) {
             // All-day events first, then by start time
@@ -211,7 +211,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!a.allDay && b.allDay) return 1;
             return a.start - b.start;
         },
-        eventDisplay: 'block',
+        eventDisplay: 'auto',
         displayEventTime: true,
         events: function(fetchInfo, successCallback, failureCallback) {
             fetch(`/api/events?start=${fetchInfo.startStr}&end=${fetchInfo.endStr}`)
@@ -242,12 +242,15 @@ document.addEventListener('DOMContentLoaded', function() {
                             
                             if (isAllDay) {
                                 cleanEvent.allDay = true;
-                                cleanEvent.display = 'background';
                                 cleanEvent.classNames = ['all-day-event'];
-                                // For all-day events, set end date to next day for proper display
-                                const nextDay = new Date(endDate);
-                                nextDay.setDate(nextDay.getDate() + 1);
-                                cleanEvent.end = nextDay.toISOString().split('T')[0];
+                                // For all-day events spanning multiple days, ensure proper end date
+                                if (startDate.toDateString() !== endDate.toDateString()) {
+                                    // Multi-day all-day event
+                                    cleanEvent.end = endDate.toISOString().split('T')[0];
+                                } else {
+                                    // Single day all-day event - don't set end to avoid issues
+                                    delete cleanEvent.end;
+                                }
                             }
                             
                             return cleanEvent;

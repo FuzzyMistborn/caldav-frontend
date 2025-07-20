@@ -251,56 +251,110 @@
             transform: translateY(-1px);
         }
 
-        /* All-day event styling */
+        /* All-day event styling - horizontal bars like in the image */
         .fc-event.all-day-event {
-            opacity: 0.8;
-            border-radius: 4px;
-            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+            border: none !important;
             font-weight: 500;
-            margin-bottom: 2px;
+            font-size: 0.85em;
+            padding: 2px 6px;
+            margin: 1px 0;
+            min-height: 20px;
+            display: flex;
+            align-items: center;
         }
 
         .fc-event.all-day-event .fc-event-title {
-            font-size: 0.85em;
-            padding: 2px 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: white;
+            text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
         }
 
-        /* Ensure all-day events appear at the top in day view */
+        /* Remove time display for all-day events */
+        .fc-event.all-day-event .fc-event-time {
+            display: none;
+        }
+
+        /* All-day events in day grid (month view) */
+        .fc-daygrid .fc-event.all-day-event {
+            margin: 1px 2px;
+            border-radius: 3px;
+        }
+
+        /* All-day events in time grid (week/day view) */
         .fc-timegrid .fc-event.all-day-event {
             position: relative;
             z-index: 10;
+            margin: 1px;
         }
 
-        /* All-day event section in day/week views */
+        /* All-day event section styling */
         .fc-timegrid .fc-daygrid-body {
             border-bottom: 1px solid #ddd;
             margin-bottom: 4px;
+            padding-bottom: 4px;
         }
 
-        /* Better contrast for all-day events */
+        /* Improve contrast and readability */
+        .fc-event.all-day-event {
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
         .fc-event.all-day-event:hover {
-            opacity: 1;
+            opacity: 0.9;
             transform: translateY(-1px);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+            cursor: pointer;
         }
 
-        /* All-day event indicator */
-        .fc-event.all-day-event::before {
-            content: '📅';
-            margin-right: 4px;
-            font-size: 0.8em;
+        /* Multi-day all-day events */
+        .fc-event.all-day-event.fc-event-start {
+            border-top-left-radius: 3px;
+            border-bottom-left-radius: 3px;
         }
 
-        /* Responsive all-day events */
+        .fc-event.all-day-event.fc-event-end {
+            border-top-right-radius: 3px;
+            border-bottom-right-radius: 3px;
+        }
+
+        .fc-event.all-day-event.fc-event-start.fc-event-end {
+            border-radius: 3px;
+        }
+
+        /* Ensure all-day events appear above timed events */
+        .fc-daygrid-event.all-day-event {
+            z-index: 5;
+        }
+
+        /* More events link styling */
+        .fc-daygrid-more-link {
+            font-size: 0.75em;
+            color: #666;
+            text-decoration: none;
+            padding: 2px 4px;
+            border-radius: 2px;
+            background: #f0f0f0;
+            margin-top: 1px;
+        }
+
+        .fc-daygrid-more-link:hover {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        /* Responsive adjustments */
         @media (max-width: 768px) {
-            .fc-event.all-day-event .fc-event-title {
+            .fc-event.all-day-event {
                 font-size: 0.75em;
-                padding: 1px 3px;
+                padding: 1px 4px;
+                min-height: 18px;
             }
             
-            .fc-event.all-day-event::before {
-                content: '';
-                margin-right: 0;
+            .fc-event.all-day-event .fc-event-title {
+                font-size: 0.9em;
             }
         }
     </style>
