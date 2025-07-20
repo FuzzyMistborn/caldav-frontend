@@ -38,6 +38,9 @@
                                 <button class="btn btn-sm btn-outline-success w-100 mb-2" onclick="testEventModal()">
                                     Test Event Modal
                                 </button>
+                                <button class="btn btn-sm btn-outline-info w-100 mb-2" onclick="testMultiDayModal()">
+                                    Test Multi-Day Modal
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -291,6 +294,51 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('Calendar rendered, testing modal...');
     console.log('Event modal element:', document.getElementById('eventModal'));
     console.log('Bootstrap modal object:', eventModal);
+    
+    // Add additional debugging for selection
+    let isSelecting = false;
+    let selectionStart = null;
+    
+    // Add mouse event listeners as fallback for multi-day selection
+    calendarEl.addEventListener('mousedown', function(e) {
+        const dayEl = e.target.closest('.fc-daygrid-day');
+        if (dayEl && e.button === 0) { // Left mouse button
+            console.log('Mouse down on day element');
+            isSelecting = true;
+            selectionStart = dayEl.getAttribute('data-date');
+            console.log('Selection started:', selectionStart);
+        }
+    });
+    
+    calendarEl.addEventListener('mouseup', function(e) {
+        if (isSelecting) {
+            const dayEl = e.target.closest('.fc-daygrid-day');
+            if (dayEl) {
+                const selectionEnd = dayEl.getAttribute('data-date');
+                console.log('Selection ended:', selectionEnd);
+                
+                if (selectionStart && selectionEnd && selectionStart !== selectionEnd) {
+                    console.log('Multi-day selection detected:', selectionStart, 'to', selectionEnd);
+                    
+                    // Calculate proper date range
+                    const startDate = new Date(selectionStart);
+                    const endDate = new Date(selectionEnd);
+                    
+                    // Ensure start is before end
+                    const actualStart = startDate <= endDate ? startDate : endDate;
+                    const actualEnd = startDate <= endDate ? endDate : startDate;
+                    
+                    openEventModal(null, null, {
+                        startDate: actualStart.toISOString().split('T')[0],
+                        endDate: actualEnd.toISOString().split('T')[0],
+                        isMultiDay: true
+                    });
+                }
+            }
+            isSelecting = false;
+            selectionStart = null;
+        }
+    });
     
     // Load calendar list and settings
     loadCalendarList();
@@ -816,6 +864,20 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (error) {
             console.error('Error opening modal:', error);
             alert('Error opening modal: ' + error.message);
+        }
+    };
+
+    window.testMultiDayModal = function() {
+        console.log('Testing multi-day modal...');
+        try {
+            openEventModal(null, null, {
+                startDate: '2025-07-20',
+                endDate: '2025-07-22',
+                isMultiDay: true
+            });
+        } catch (error) {
+            console.error('Error opening multi-day modal:', error);
+            alert('Error opening multi-day modal: ' + error.message);
         }
     };
 
