@@ -6,6 +6,9 @@ A modern, web-based CalDAV client built with Flask that provides a calendar inte
 
 I wanted this because I'm thinking of moving away from Nextcloud but I need a good web-based CalDav frontend.  I couldn't find any I liked, so I asked Claude to make one for me.
 
+## Screenshots
+
+
 ## ✨ Features
 
 ### 🗓️ Multi-Calendar Support
@@ -90,14 +93,6 @@ user: "1000:1000"  # Set to your user ID
 1. **Use App Passwords:** For Nextcloud, create dedicated app passwords instead of using your main password
 2. **HTTPS Only:** Always use HTTPS in production to protect credentials
 3. **Secret Key:** Generate a strong secret key for session security
-4. **Regular Updates:** Keep dependencies updated for security patches
-
-## 📋 Requirements
-
-- **Python:** 3.8+ 
-- **Dependencies:** See `requirements.txt`
-- **CalDAV Server:** Any RFC 4791 compliant server
-- **Browser:** Modern browser with JavaScript enabled
 
 ## 📄 License
 
