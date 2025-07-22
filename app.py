@@ -136,165 +136,36 @@ class CalDAVClient:
             return False    
 
     def get_events(self, start_date, end_date):
-        """Get events within date range - improved text parsing"""
+        """Diagnostic version to examine CalDAV data"""
         if not self.calendar:
             return []
         
         try:
-            app.logger.info(f"Fetching events from {start_date} to {end_date}")
-            events = self.calendar.search(
-                start=start_date,
-                end=end_date,
-                event=True,
-                expand=True
-            )
+            events = self.calendar.search(start=start_date, end=end_date, event=True, expand=True)
+            app.logger.info(f"Found {len(events)} events")
             
-            app.logger.info(f"Found {len(events)} raw events from CalDAV")
+            # Just examine the first event in detail
+            if len(events) > 0:
+                first_event = events[0]
+                raw_data = first_event.data
+                if isinstance(raw_data, bytes):
+                    raw_data = raw_data.decode('utf-8', errors='ignore')
+                
+                app.logger.info(f"First event raw data (length: {len(raw_data)}):")
+                app.logger.info(f"Data preview: {raw_data[:1000]}")
+                
+                # Look for VEVENT sections
+                if 'BEGIN:VEVENT' in raw_data:
+                    app.logger.info("Found VEVENT in data")
+                else:
+                    app.logger.warning("No VEVENT found in data")
             
-            event_list = []
-            for i, event in enumerate(events):
-                try:
-                    # Get raw iCalendar data
-                    raw_data = event.data
-                    if isinstance(raw_data, bytes):
-                        raw_data = raw_data.decode('utf-8', errors='ignore')
-                    
-                    # Log first event's raw data for debugging
-                    if i == 0:
-                        app.logger.info(f"Sample raw event data: {raw_data[:500]}...")
-                    
-                    # Parse the event
-                    event_data = self.parse_ical_simple(raw_data, str(event.url))
-                    if event_data:
-                        event_list.append(event_data)
-                        app.logger.debug(f"Parsed event: {event_data['summary']}")
-                    else:
-                        app.logger.warning(f"Failed to parse event {i}")
-                        
-                except Exception as e:
-                    app.logger.error(f"Error processing event {i}: {e}")
-                    continue
-            
-            app.logger.info(f"Successfully processed {len(event_list)} events")
-            return event_list
-            
-        except Exception as e:
-            app.logger.error(f"Error getting events: {e}")
+            # Return empty for now
             return []
-
-    def parse_ical_simple(self, ical_text, event_url):
-        """Simple line-by-line iCalendar parsing"""
-        try:
-            # Initialize with defaults
-            event_data = {
-                'uid': str(uuid.uuid4()),
-                'summary': 'Event',
-                'description': '',
-                'start': datetime.now(),
-                'end': datetime.now() + timedelta(hours=1),
-                'url': event_url
-            }
-            
-            # Split into lines and clean them
-            lines = [line.strip() for line in ical_text.split('\n') if line.strip()]
-            
-            in_vevent = False
-            
-            for line in lines:
-                # Check for VEVENT boundaries
-                if line == 'BEGIN:VEVENT':
-                    in_vevent = True
-                    continue
-                elif line == 'END:VEVENT':
-                    break
-                elif not in_vevent:
-                    continue
-                
-                # Skip lines without colons
-                if ':' not in line:
-                    continue
-                
-                try:
-                    # Split on first colon only
-                    colon_pos = line.find(':')
-                    prop = line[:colon_pos].strip()
-                    value = line[colon_pos + 1:].strip()
-                    
-                    # Remove property parameters (everything after semicolon)
-                    if ';' in prop:
-                        prop = prop.split(';')[0]
-                    
-                    # Parse different properties
-                    if prop == 'UID' and value:
-                        event_data['uid'] = value
-                    elif prop == 'SUMMARY' and value:
-                        event_data['summary'] = value
-                    elif prop == 'DESCRIPTION' and value:
-                        # Handle escaped characters in descriptions
-                        value = value.replace('\\n', '\n').replace('\\,', ',').replace('\\;', ';')
-                        event_data['description'] = value
-                    elif prop == 'DTSTART' and value:
-                        parsed_date = self.parse_simple_datetime(value)
-                        if parsed_date:
-                            event_data['start'] = parsed_date
-                    elif prop == 'DTEND' and value:
-                        parsed_date = self.parse_simple_datetime(value)
-                        if parsed_date:
-                            event_data['end'] = parsed_date
-                            
-                except Exception as line_error:
-                    app.logger.debug(f"Error parsing line '{line[:50]}...': {line_error}")
-                    continue
-            
-            # Validate the event data
-            if event_data['end'] <= event_data['start']:
-                event_data['end'] = event_data['start'] + timedelta(hours=1)
-            
-            # Only return if we have a meaningful summary
-            if event_data['summary'] and event_data['summary'] != 'Event':
-                return event_data
-            else:
-                app.logger.debug(f"Skipping event with empty/default summary: {event_data}")
-                return None
             
         except Exception as e:
-            app.logger.error(f"Error in parse_ical_simple: {e}")
-            return None
-
-    def parse_simple_datetime(self, dt_str):
-        """Parse datetime string with multiple fallback formats"""
-        if not dt_str:
-            return None
-        
-        try:
-            # Remove common timezone indicators and parameters
-            dt_str = dt_str.replace('Z', '').replace('T', ' ')
-            
-            # Try different datetime formats
-            formats = [
-                '%Y%m%d %H%M%S',  # 20250722 140000
-                '%Y%m%d %H%M',    # 20250722 1400
-                '%Y%m%d',         # 20250722 (date only)
-                '%Y-%m-%d %H:%M:%S',  # 2025-07-22 14:00:00
-                '%Y-%m-%d %H:%M',     # 2025-07-22 14:00
-                '%Y-%m-%d',           # 2025-07-22
-            ]
-            
-            for fmt in formats:
-                try:
-                    if ' ' not in dt_str and '%H' in fmt:
-                        continue  # Skip time formats for date-only strings
-                    return datetime.strptime(dt_str, fmt)
-                except ValueError:
-                    continue
-            
-            # If all formats fail, log and return None
-            app.logger.warning(f"Could not parse datetime: '{dt_str}'")
-            return None
-            
-        except Exception as e:
-            app.logger.warning(f"Error parsing datetime '{dt_str}': {e}")
-            return None
+            app.logger.error(f"Diagnostic error: {e}")
+            return []
     
     def create_event(self, summary, description, start_dt, end_dt):
         """Create a new event"""
