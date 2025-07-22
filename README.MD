@@ -6,8 +6,11 @@ A modern, web-based CalDAV client built with Flask that provides a calendar inte
 
 I wanted this because I'm thinking of moving away from Nextcloud but I need a good web-based CalDav frontend.  I couldn't find any I liked, so I asked Claude to make one for me.
 
-## Screenshots
+## 🖼️ Screenshots
+![Login](https://github.com/FuzzyMistborn/caldav-frontend/blob/main/screenshots/login.png?raw=true)
+![Monthly](https://github.com/FuzzyMistborn/caldav-frontend/blob/main/screenshots/monthly.png?raw=true)
 
+Additional Screenshots [here](https://github.com/FuzzyMistborn/caldav-frontend/tree/main/screenshots)
 
 ## ✨ Features
 
