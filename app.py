@@ -136,7 +136,7 @@ class CalDAVClient:
             return False    
 
     def get_events(self, start_date, end_date):
-        """Get events with better data access handling"""
+        """Get events - clean version without test events"""
         if not self.calendar:
             return []
         
@@ -150,80 +150,51 @@ class CalDAVClient:
             event_list = []
             processed_count = 0
             
-            for i, obj in enumerate(all_objects[:10]):  # Limit to first 10 objects
+            for i, obj in enumerate(all_objects):
                 try:
-                    app.logger.debug(f"Processing object {i}: {type(obj)}")
-                    
-                    # Try multiple ways to get the data
+                    # Try to get data
                     raw_data = None
                     
-                    # Method 1: Direct data attribute
                     if hasattr(obj, 'data') and obj.data is not None:
                         raw_data = obj.data
-                        app.logger.debug(f"Got data via .data attribute")
-                    
-                    # Method 2: get_data() method
                     elif hasattr(obj, 'get_data'):
                         try:
                             raw_data = obj.get_data()
-                            app.logger.debug(f"Got data via .get_data() method")
-                        except Exception as e:
-                            app.logger.debug(f"get_data() failed: {e}")
-                    
-                    # Method 3: Try to load/refresh the object
+                        except Exception:
+                            pass
                     elif hasattr(obj, 'load'):
                         try:
                             obj.load()
                             raw_data = getattr(obj, 'data', None)
-                            app.logger.debug(f"Got data after .load()")
-                        except Exception as e:
-                            app.logger.debug(f"load() failed: {e}")
-                    
-                    # Method 4: Try calendar_data attribute
+                        except Exception:
+                            pass
                     elif hasattr(obj, 'calendar_data'):
                         raw_data = obj.calendar_data
-                        app.logger.debug(f"Got data via .calendar_data")
                     
-                    # Check if we got data
                     if raw_data is None:
-                        app.logger.warning(f"Object {i} has no accessible data. Available attributes: {[attr for attr in dir(obj) if not attr.startswith('_')]}")
                         continue
                     
-                    # Convert bytes to string if needed
+                    # Convert to string
                     if isinstance(raw_data, bytes):
                         raw_data = raw_data.decode('utf-8', errors='ignore')
                     
-                    # Ensure raw_data is a string
-                    if not isinstance(raw_data, str):
-                        app.logger.warning(f"Object {i} data is not string: {type(raw_data)}")
+                    if not isinstance(raw_data, str) or 'BEGIN:VEVENT' not in raw_data:
                         continue
                     
-                    # Log first object data for debugging
-                    if processed_count == 0:
-                        app.logger.info(f"First object data preview: {raw_data[:200]}...")
-                    
-                    # Check if this is an event
-                    if 'BEGIN:VEVENT' not in raw_data:
-                        app.logger.debug(f"Object {i} is not a VEVENT, contains: {raw_data[:100]}...")
-                        continue
-                    
-                    # Try to get the object's URL
+                    # Get object URL
                     obj_url = getattr(obj, 'url', None) or getattr(obj, 'canonical_url', f'/event/{i}')
                     
                     # Parse the event
                     parsed_event = self.safe_parse_event(raw_data, str(obj_url))
                     if parsed_event:
-                        # Simple date filtering
+                        # Date range check
                         event_start = parsed_event['start']
                         event_end = parsed_event['end']
                         
-                        # Check if event overlaps with requested date range
                         if (event_start.date() <= end_date.date() and 
                             event_end.date() >= start_date.date()):
                             event_list.append(parsed_event)
-                            app.logger.info(f"Added event: '{parsed_event['summary']}' on {event_start.date()}")
-                        else:
-                            app.logger.debug(f"Event '{parsed_event['summary']}' outside date range")
+                            app.logger.debug(f"Added event: '{parsed_event['summary']}'")
                     
                     processed_count += 1
                     
@@ -231,34 +202,12 @@ class CalDAVClient:
                     app.logger.error(f"Error processing object {i}: {obj_error}")
                     continue
             
-            app.logger.info(f"Successfully processed {processed_count} objects, returning {len(event_list)} events")
-            
-            # If we found no events, add a test event to verify the system works
-            if len(event_list) == 0:
-                app.logger.warning("No events found, adding test event")
-                test_event = {
-                    'uid': 'no-events-found',
-                    'summary': 'No CalDAV Events Found',
-                    'description': 'No events were found in the CalDAV calendar for this date range',
-                    'start': start_date + timedelta(days=1),
-                    'end': start_date + timedelta(days=1, hours=1),
-                    'url': '/no-events'
-                }
-                event_list.append(test_event)
-            
+            app.logger.info(f"Processed {processed_count} objects, returning {len(event_list)} events")
             return event_list
             
         except Exception as e:
             app.logger.error(f"Error in get_events: {e}")
-            # Return fallback event
-            return [{
-                'uid': 'error-fallback',
-                'summary': 'CalDAV Error',
-                'description': f'Error accessing CalDAV: {str(e)}',
-                'start': start_date + timedelta(days=1),
-                'end': start_date + timedelta(days=1, hours=1),
-                'url': '/error'
-            }]
+            return []
 
     def safe_parse_event(self, ical_text, event_url):
         """Safely parse iCalendar text with extensive error handling"""
