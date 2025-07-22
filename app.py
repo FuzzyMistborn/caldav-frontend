@@ -136,186 +136,269 @@ class CalDAVClient:
             return False    
 
     def get_events(self, start_date, end_date):
-        """Get events using direct CalDAV queries - bypass library search"""
+        """Get events with better data access handling"""
         if not self.calendar:
             return []
         
         try:
             app.logger.info(f"Getting events from {start_date} to {end_date}")
             
-            # Try to get all events without date filtering first
-            try:
-                # Use the calendar's direct event listing instead of search
-                all_objects = list(self.calendar.objects())
-                app.logger.info(f"Found {len(all_objects)} calendar objects")
-                
-                event_list = []
-                for i, obj in enumerate(all_objects[:20]):  # Limit to first 20 to avoid issues
-                    try:
-                        # Get the raw data without using icalendar library
-                        if hasattr(obj, 'data'):
-                            raw_data = obj.data
-                        elif hasattr(obj, 'get_data'):
+            # Get all calendar objects
+            all_objects = list(self.calendar.objects())
+            app.logger.info(f"Found {len(all_objects)} calendar objects")
+            
+            event_list = []
+            processed_count = 0
+            
+            for i, obj in enumerate(all_objects[:10]):  # Limit to first 10 objects
+                try:
+                    app.logger.debug(f"Processing object {i}: {type(obj)}")
+                    
+                    # Try multiple ways to get the data
+                    raw_data = None
+                    
+                    # Method 1: Direct data attribute
+                    if hasattr(obj, 'data') and obj.data is not None:
+                        raw_data = obj.data
+                        app.logger.debug(f"Got data via .data attribute")
+                    
+                    # Method 2: get_data() method
+                    elif hasattr(obj, 'get_data'):
+                        try:
                             raw_data = obj.get_data()
-                        else:
-                            app.logger.warning(f"Object {i} has no data method")
-                            continue
-                        
-                        if isinstance(raw_data, bytes):
-                            raw_data = raw_data.decode('utf-8', errors='ignore')
-                        
-                        # Log first object for debugging
-                        if i == 0:
-                            app.logger.info(f"First object data (first 300 chars): {raw_data[:300]}")
-                        
-                        # Simple check for events
-                        if 'BEGIN:VEVENT' not in raw_data:
-                            app.logger.debug(f"Object {i} is not an event, skipping")
-                            continue
-                        
-                        # Parse manually without icalendar library
-                        parsed_event = self.manual_parse_event(raw_data, getattr(obj, 'url', f'/event/{i}'))
-                        if parsed_event:
-                            # Simple date filtering
-                            event_start = parsed_event['start']
-                            event_end = parsed_event['end']
-                            
-                            if (event_start.date() <= end_date.date() and 
-                                event_end.date() >= start_date.date()):
-                                event_list.append(parsed_event)
-                                app.logger.debug(f"Added event: {parsed_event['summary']}")
-                            else:
-                                app.logger.debug(f"Event outside date range: {parsed_event['summary']}")
-                        
-                    except Exception as obj_error:
-                        app.logger.error(f"Error processing object {i}: {obj_error}")
+                            app.logger.debug(f"Got data via .get_data() method")
+                        except Exception as e:
+                            app.logger.debug(f"get_data() failed: {e}")
+                    
+                    # Method 3: Try to load/refresh the object
+                    elif hasattr(obj, 'load'):
+                        try:
+                            obj.load()
+                            raw_data = getattr(obj, 'data', None)
+                            app.logger.debug(f"Got data after .load()")
+                        except Exception as e:
+                            app.logger.debug(f"load() failed: {e}")
+                    
+                    # Method 4: Try calendar_data attribute
+                    elif hasattr(obj, 'calendar_data'):
+                        raw_data = obj.calendar_data
+                        app.logger.debug(f"Got data via .calendar_data")
+                    
+                    # Check if we got data
+                    if raw_data is None:
+                        app.logger.warning(f"Object {i} has no accessible data. Available attributes: {[attr for attr in dir(obj) if not attr.startswith('_')]}")
                         continue
-                
-                app.logger.info(f"Returning {len(event_list)} events")
-                return event_list
-                
-            except Exception as list_error:
-                app.logger.error(f"Error listing calendar objects: {list_error}")
-                
-                # Fallback: return test events so the calendar isn't empty
-                app.logger.info("Falling back to test events")
-                return self.create_fallback_events(start_date, end_date)
+                    
+                    # Convert bytes to string if needed
+                    if isinstance(raw_data, bytes):
+                        raw_data = raw_data.decode('utf-8', errors='ignore')
+                    
+                    # Ensure raw_data is a string
+                    if not isinstance(raw_data, str):
+                        app.logger.warning(f"Object {i} data is not string: {type(raw_data)}")
+                        continue
+                    
+                    # Log first object data for debugging
+                    if processed_count == 0:
+                        app.logger.info(f"First object data preview: {raw_data[:200]}...")
+                    
+                    # Check if this is an event
+                    if 'BEGIN:VEVENT' not in raw_data:
+                        app.logger.debug(f"Object {i} is not a VEVENT, contains: {raw_data[:100]}...")
+                        continue
+                    
+                    # Try to get the object's URL
+                    obj_url = getattr(obj, 'url', None) or getattr(obj, 'canonical_url', f'/event/{i}')
+                    
+                    # Parse the event
+                    parsed_event = self.safe_parse_event(raw_data, str(obj_url))
+                    if parsed_event:
+                        # Simple date filtering
+                        event_start = parsed_event['start']
+                        event_end = parsed_event['end']
+                        
+                        # Check if event overlaps with requested date range
+                        if (event_start.date() <= end_date.date() and 
+                            event_end.date() >= start_date.date()):
+                            event_list.append(parsed_event)
+                            app.logger.info(f"Added event: '{parsed_event['summary']}' on {event_start.date()}")
+                        else:
+                            app.logger.debug(f"Event '{parsed_event['summary']}' outside date range")
+                    
+                    processed_count += 1
+                    
+                except Exception as obj_error:
+                    app.logger.error(f"Error processing object {i}: {obj_error}")
+                    continue
+            
+            app.logger.info(f"Successfully processed {processed_count} objects, returning {len(event_list)} events")
+            
+            # If we found no events, add a test event to verify the system works
+            if len(event_list) == 0:
+                app.logger.warning("No events found, adding test event")
+                test_event = {
+                    'uid': 'no-events-found',
+                    'summary': 'No CalDAV Events Found',
+                    'description': 'No events were found in the CalDAV calendar for this date range',
+                    'start': start_date + timedelta(days=1),
+                    'end': start_date + timedelta(days=1, hours=1),
+                    'url': '/no-events'
+                }
+                event_list.append(test_event)
+            
+            return event_list
             
         except Exception as e:
             app.logger.error(f"Error in get_events: {e}")
-            return self.create_fallback_events(start_date, end_date)
+            # Return fallback event
+            return [{
+                'uid': 'error-fallback',
+                'summary': 'CalDAV Error',
+                'description': f'Error accessing CalDAV: {str(e)}',
+                'start': start_date + timedelta(days=1),
+                'end': start_date + timedelta(days=1, hours=1),
+                'url': '/error'
+            }]
 
-    def manual_parse_event(self, ical_text, event_url):
-        """Manually parse iCalendar text without using icalendar library"""
+    def safe_parse_event(self, ical_text, event_url):
+        """Safely parse iCalendar text with extensive error handling"""
         try:
-            lines = ical_text.split('\n')
+            if not ical_text or not isinstance(ical_text, str):
+                return None
+            
+            lines = [line.strip() for line in ical_text.split('\n') if line.strip()]
             
             # Find VEVENT section
+            vevent_lines = []
             in_vevent = False
-            event_lines = []
             
             for line in lines:
-                line = line.strip()
                 if line == 'BEGIN:VEVENT':
                     in_vevent = True
                     continue
                 elif line == 'END:VEVENT':
                     break
                 elif in_vevent and line:
-                    event_lines.append(line)
+                    vevent_lines.append(line)
             
-            if not event_lines:
+            if not vevent_lines:
+                app.logger.debug("No VEVENT section found")
                 return None
             
-            # Initialize event with defaults
+            # Initialize with safe defaults
             event_data = {
                 'uid': str(uuid.uuid4()),
                 'summary': 'Untitled Event',
                 'description': '',
-                'start': datetime.now(),
-                'end': datetime.now() + timedelta(hours=1),
-                'url': str(event_url)
+                'start': datetime.now().replace(hour=9, minute=0, second=0, microsecond=0),
+                'end': datetime.now().replace(hour=10, minute=0, second=0, microsecond=0),
+                'url': str(event_url) if event_url else '/unknown'
             }
             
-            # Parse event properties
-            for line in event_lines:
-                if ':' not in line:
-                    continue
-                
+            # Parse each line safely
+            for line in vevent_lines:
                 try:
-                    prop, value = line.split(':', 1)
-                    prop = prop.split(';')[0]  # Remove parameters
+                    if ':' not in line:
+                        continue
                     
-                    if prop == 'UID':
-                        event_data['uid'] = value
-                    elif prop == 'SUMMARY':
-                        event_data['summary'] = value if value else 'Untitled Event'
-                    elif prop == 'DESCRIPTION':
-                        event_data['description'] = value.replace('\\n', '\n')
-                    elif prop == 'DTSTART':
-                        dt = self.simple_date_parse(value)
-                        if dt:
-                            event_data['start'] = dt
-                    elif prop == 'DTEND':
-                        dt = self.simple_date_parse(value)
-                        if dt:
-                            event_data['end'] = dt
-                except:
+                    colon_pos = line.find(':')
+                    prop = line[:colon_pos].strip()
+                    value = line[colon_pos + 1:].strip()
+                    
+                    # Remove property parameters
+                    if ';' in prop:
+                        prop = prop.split(';')[0]
+                    
+                    # Parse known properties
+                    if prop == 'UID' and value:
+                        event_data['uid'] = value[:100]  # Limit length
+                    elif prop == 'SUMMARY' and value:
+                        event_data['summary'] = value[:200]  # Limit length
+                    elif prop == 'DESCRIPTION' and value:
+                        # Clean up description
+                        clean_desc = value.replace('\\n', '\n').replace('\\,', ',').replace('\\;', ';')
+                        event_data['description'] = clean_desc[:500]  # Limit length
+                    elif prop == 'DTSTART' and value:
+                        parsed_dt = self.robust_date_parse(value)
+                        if parsed_dt:
+                            event_data['start'] = parsed_dt
+                    elif prop == 'DTEND' and value:
+                        parsed_dt = self.robust_date_parse(value)
+                        if parsed_dt:
+                            event_data['end'] = parsed_dt
+                            
+                except Exception as line_error:
+                    app.logger.debug(f"Error parsing line '{line[:50]}': {line_error}")
                     continue
             
-            # Ensure end is after start
+            # Validate event data
             if event_data['end'] <= event_data['start']:
                 event_data['end'] = event_data['start'] + timedelta(hours=1)
             
+            app.logger.debug(f"Parsed event: {event_data['summary']} from {event_data['start']} to {event_data['end']}")
             return event_data
             
         except Exception as e:
-            app.logger.debug(f"Error in manual_parse_event: {e}")
+            app.logger.error(f"Error in safe_parse_event: {e}")
             return None
 
-    def simple_date_parse(self, date_str):
-        """Very simple date parsing"""
+    def robust_date_parse(self, date_str):
+        """Very robust date parsing with multiple fallbacks"""
+        if not date_str or not isinstance(date_str, str):
+            return None
+        
         try:
             # Clean the string
-            date_str = date_str.replace('T', '').replace('Z', '').replace('-', '').replace(':', '')
+            original_str = date_str
+            date_str = date_str.strip().replace('T', '').replace('Z', '').replace('-', '').replace(':', '')
             
-            # Try YYYYMMDDHHMMSS
+            # Extract numeric parts
             if len(date_str) >= 8:
-                year = int(date_str[:4])
-                month = int(date_str[4:6])
-                day = int(date_str[6:8])
-                
-                hour = int(date_str[8:10]) if len(date_str) >= 10 else 0
-                minute = int(date_str[10:12]) if len(date_str) >= 12 else 0
-                second = int(date_str[12:14]) if len(date_str) >= 14 else 0
-                
-                return datetime(year, month, day, hour, minute, second)
+                try:
+                    year = int(date_str[:4])
+                    month = int(date_str[4:6])
+                    day = int(date_str[6:8])
+                    
+                    # Validate date parts
+                    if year < 1900 or year > 2100:
+                        raise ValueError(f"Invalid year: {year}")
+                    if month < 1 or month > 12:
+                        raise ValueError(f"Invalid month: {month}")
+                    if day < 1 or day > 31:
+                        raise ValueError(f"Invalid day: {day}")
+                    
+                    # Extract time if available
+                    hour = 0
+                    minute = 0
+                    second = 0
+                    
+                    if len(date_str) >= 10:
+                        hour = int(date_str[8:10])
+                    if len(date_str) >= 12:
+                        minute = int(date_str[10:12])
+                    if len(date_str) >= 14:
+                        second = int(date_str[12:14])
+                    
+                    # Validate time parts
+                    if hour < 0 or hour > 23:
+                        hour = 0
+                    if minute < 0 or minute > 59:
+                        minute = 0
+                    if second < 0 or second > 59:
+                        second = 0
+                    
+                    return datetime(year, month, day, hour, minute, second)
+                    
+                except ValueError as ve:
+                    app.logger.warning(f"Date validation failed for '{original_str}': {ve}")
+                    return None
             
+            app.logger.warning(f"Date string too short: '{original_str}'")
             return None
-        except:
+            
+        except Exception as e:
+            app.logger.warning(f"Date parsing failed for '{date_str}': {e}")
             return None
-
-    def create_fallback_events(self, start_date, end_date):
-        """Create fallback test events if CalDAV fails"""
-        try:
-            fallback_events = []
-            base_date = start_date + timedelta(days=1)
-            
-            for i in range(2):
-                event_date = base_date + timedelta(days=i*3)
-                fallback_events.append({
-                    'uid': f'fallback-{i}',
-                    'summary': f'CalDAV Event {i+1} (Fallback)',
-                    'description': 'This is a fallback event while CalDAV issues are resolved',
-                    'start': event_date,
-                    'end': event_date + timedelta(hours=1),
-                    'url': f'/fallback-{i}'
-                })
-            
-            app.logger.info(f"Created {len(fallback_events)} fallback events")
-            return fallback_events
-        except:
-            return []
     
     def create_event(self, summary, description, start_dt, end_dt):
         """Create a new event"""
