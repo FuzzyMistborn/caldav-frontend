@@ -136,132 +136,29 @@ class CalDAVClient:
             return False    
 
     def get_events(self, start_date, end_date):
-        """Get events within date range - bypass icalendar parsing"""
+        """Minimal test version - creates fake events"""
         if not self.calendar:
             return []
         
-        try:
-            app.logger.info(f"Fetching events from {start_date} to {end_date}")
-            events = self.calendar.search(
-                start=start_date,
-                end=end_date,
-                event=True,
-                expand=True
-            )
-            
-            app.logger.info(f"Found {len(events)} raw events from CalDAV")
-            
-            event_list = []
-            for i, event in enumerate(events):
-                try:
-                    # Work with raw iCalendar text instead of parsing it
-                    raw_data = event.data
-                    if isinstance(raw_data, bytes):
-                        raw_data = raw_data.decode('utf-8')
-                    
-                    # Simple text parsing instead of full iCalendar parsing
-                    event_data = self.parse_ical_text(raw_data, str(event.url))
-                    if event_data:
-                        event_list.append(event_data)
-                        
-                except Exception as e:
-                    app.logger.error(f"Error processing event {i}: {e}")
-                    continue
-            
-            app.logger.info(f"Successfully processed {len(event_list)} events")
-            return event_list
-            
-        except Exception as e:
-            app.logger.error(f"Error getting events: {e}")
-            return []
-
-    def parse_ical_text(self, ical_text, event_url):
-        """Simple text-based iCalendar parsing to avoid recursion issues"""
-        try:
-            lines = ical_text.split('\n')
-            event_data = {
-                'uid': str(uuid.uuid4()),
-                'summary': 'Untitled Event',
-                'description': '',
-                'start': datetime.now(),
-                'end': datetime.now() + timedelta(hours=1),
-                'url': event_url
-            }
-            
-            in_vevent = False
-            
-            for line in lines:
-                line = line.strip()
-                
-                if line == 'BEGIN:VEVENT':
-                    in_vevent = True
-                    continue
-                elif line == 'END:VEVENT':
-                    break
-                elif not in_vevent:
-                    continue
-                
-                if ':' not in line:
-                    continue
-                    
-                try:
-                    key, value = line.split(':', 1)
-                    
-                    # Handle property parameters (e.g., DTSTART;VALUE=DATE:20250722)
-                    if ';' in key:
-                        key = key.split(';')[0]
-                    
-                    if key == 'UID':
-                        event_data['uid'] = value
-                    elif key == 'SUMMARY':
-                        event_data['summary'] = value
-                    elif key == 'DESCRIPTION':
-                        event_data['description'] = value
-                    elif key == 'DTSTART':
-                        event_data['start'] = self.parse_datetime_string(value)
-                    elif key == 'DTEND':
-                        event_data['end'] = self.parse_datetime_string(value)
-                        
-                except Exception as e:
-                    app.logger.debug(f"Error parsing line '{line}': {e}")
-                    continue
-            
-            # Ensure end time is after start time
-            if event_data['end'] <= event_data['start']:
-                event_data['end'] = event_data['start'] + timedelta(hours=1)
-            
-            return event_data
-            
-        except Exception as e:
-            app.logger.error(f"Error parsing iCalendar text: {e}")
-            return None
-
-    def parse_datetime_string(self, dt_string):
-        """Parse datetime string from iCalendar format"""
-        try:
-            # Remove timezone info for now (simplified)
-            dt_string = dt_string.split(';')[0]  # Remove parameters
-            
-            # Handle different formats
-            if 'T' in dt_string:
-                # DateTime format: 20250722T140000 or 20250722T140000Z
-                dt_string = dt_string.replace('Z', '')  # Remove UTC indicator
-                if len(dt_string) == 15:  # YYYYMMDDTHHMMSS
-                    return datetime.strptime(dt_string, '%Y%m%dT%H%M%S')
-                elif len(dt_string) == 13:  # YYYYMMDDTHHMM
-                    return datetime.strptime(dt_string, '%Y%m%dT%H%M')
-            else:
-                # Date only format: 20250722
-                if len(dt_string) == 8:  # YYYYMMDD
-                    return datetime.strptime(dt_string, '%Y%m%d')
-            
-            # Fallback to current time if parsing fails
-            app.logger.warning(f"Could not parse datetime: {dt_string}")
-            return datetime.now()
-            
-        except Exception as e:
-            app.logger.warning(f"Error parsing datetime '{dt_string}': {e}")
-            return datetime.now()
+        app.logger.info("Creating test events")
+        
+        # Create a few test events to verify display works
+        test_events = []
+        base_date = start_date + timedelta(days=1)
+        
+        for i in range(3):
+            event_date = base_date + timedelta(days=i*2)
+            test_events.append({
+                'uid': f'test-event-{i}',
+                'summary': f'Test Event {i+1}',
+                'description': f'This is test event number {i+1}',
+                'start': event_date,
+                'end': event_date + timedelta(hours=1),
+                'url': f'/test-event-{i}'
+            })
+        
+        app.logger.info(f"Created {len(test_events)} test events")
+        return test_events
     
     def create_event(self, summary, description, start_dt, end_dt):
         """Create a new event"""
