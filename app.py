@@ -136,11 +136,12 @@ class CalDAVClient:
             return False    
 
     def get_events(self, start_date, end_date):
-        """Get events within date range"""
+        """Get events within date range - bypass icalendar parsing"""
         if not self.calendar:
             return []
         
         try:
+            app.logger.info(f"Fetching events from {start_date} to {end_date}")
             events = self.calendar.search(
                 start=start_date,
                 end=end_date,
@@ -148,76 +149,119 @@ class CalDAVClient:
                 expand=True
             )
             
+            app.logger.info(f"Found {len(events)} raw events from CalDAV")
+            
             event_list = []
-            for event in events:
+            for i, event in enumerate(events):
                 try:
-                    # Add recursion depth protection
-                    import sys
-                    current_recursion_limit = sys.getrecursionlimit()
-                    if current_recursion_limit < 2000:
-                        sys.setrecursionlimit(2000)  # Temporarily increase if needed
+                    # Work with raw iCalendar text instead of parsing it
+                    raw_data = event.data
+                    if isinstance(raw_data, bytes):
+                        raw_data = raw_data.decode('utf-8')
                     
-                    cal = Calendar.from_ical(event.data)
-                    
-                    # Reset recursion limit
-                    sys.setrecursionlimit(current_recursion_limit)
-                    
-                    for component in cal.walk():
-                        if component.name == "VEVENT":
-                            try:
-                                # More defensive parsing
-                                uid = component.get('uid')
-                                summary = component.get('summary')
-                                description = component.get('description')
-                                dtstart = component.get('dtstart')
-                                dtend = component.get('dtend')
-                                
-                                # Skip if essential fields are missing
-                                if not uid or not dtstart:
-                                    app.logger.warning(f"Skipping event with missing UID or start date")
-                                    continue
-                                
-                                # Handle missing end date
-                                if not dtend:
-                                    # If no end date, assume 1 hour duration for timed events
-                                    # or same day for all-day events
-                                    if hasattr(dtstart.dt, 'hour'):  # Timed event
-                                        dtend_dt = dtstart.dt + timedelta(hours=1)
-                                    else:  # All-day event
-                                        dtend_dt = dtstart.dt
-                                else:
-                                    dtend_dt = dtend.dt
-                                
-                                event_data = {
-                                    'uid': str(uid) if uid else str(uuid.uuid4()),
-                                    'summary': str(summary) if summary else 'Untitled Event',
-                                    'description': str(description) if description else '',
-                                    'start': dtstart.dt,
-                                    'end': dtend_dt,
-                                    'url': str(event.url)
-                                }
-                                event_list.append(event_data)
-                                break  # Only process first VEVENT component
-                            except Exception as e:
-                                app.logger.error(f"Error parsing event component: {e}")
-                                continue
-                                
-                except RecursionError as e:
-                    app.logger.error(f"Recursion error parsing event: {e}")
-                    continue
+                    # Simple text parsing instead of full iCalendar parsing
+                    event_data = self.parse_ical_text(raw_data, str(event.url))
+                    if event_data:
+                        event_list.append(event_data)
+                        
                 except Exception as e:
-                    app.logger.error(f"Error parsing event: {e}")
+                    app.logger.error(f"Error processing event {i}: {e}")
                     continue
             
-            app.logger.info(f"Successfully parsed {len(event_list)} events")
+            app.logger.info(f"Successfully processed {len(event_list)} events")
             return event_list
             
-        except RecursionError as e:
-            app.logger.error(f"Recursion error in get_events: {e}")
-            return []
         except Exception as e:
             app.logger.error(f"Error getting events: {e}")
             return []
+
+    def parse_ical_text(self, ical_text, event_url):
+        """Simple text-based iCalendar parsing to avoid recursion issues"""
+        try:
+            lines = ical_text.split('\n')
+            event_data = {
+                'uid': str(uuid.uuid4()),
+                'summary': 'Untitled Event',
+                'description': '',
+                'start': datetime.now(),
+                'end': datetime.now() + timedelta(hours=1),
+                'url': event_url
+            }
+            
+            in_vevent = False
+            
+            for line in lines:
+                line = line.strip()
+                
+                if line == 'BEGIN:VEVENT':
+                    in_vevent = True
+                    continue
+                elif line == 'END:VEVENT':
+                    break
+                elif not in_vevent:
+                    continue
+                
+                if ':' not in line:
+                    continue
+                    
+                try:
+                    key, value = line.split(':', 1)
+                    
+                    # Handle property parameters (e.g., DTSTART;VALUE=DATE:20250722)
+                    if ';' in key:
+                        key = key.split(';')[0]
+                    
+                    if key == 'UID':
+                        event_data['uid'] = value
+                    elif key == 'SUMMARY':
+                        event_data['summary'] = value
+                    elif key == 'DESCRIPTION':
+                        event_data['description'] = value
+                    elif key == 'DTSTART':
+                        event_data['start'] = self.parse_datetime_string(value)
+                    elif key == 'DTEND':
+                        event_data['end'] = self.parse_datetime_string(value)
+                        
+                except Exception as e:
+                    app.logger.debug(f"Error parsing line '{line}': {e}")
+                    continue
+            
+            # Ensure end time is after start time
+            if event_data['end'] <= event_data['start']:
+                event_data['end'] = event_data['start'] + timedelta(hours=1)
+            
+            return event_data
+            
+        except Exception as e:
+            app.logger.error(f"Error parsing iCalendar text: {e}")
+            return None
+
+    def parse_datetime_string(self, dt_string):
+        """Parse datetime string from iCalendar format"""
+        try:
+            # Remove timezone info for now (simplified)
+            dt_string = dt_string.split(';')[0]  # Remove parameters
+            
+            # Handle different formats
+            if 'T' in dt_string:
+                # DateTime format: 20250722T140000 or 20250722T140000Z
+                dt_string = dt_string.replace('Z', '')  # Remove UTC indicator
+                if len(dt_string) == 15:  # YYYYMMDDTHHMMSS
+                    return datetime.strptime(dt_string, '%Y%m%dT%H%M%S')
+                elif len(dt_string) == 13:  # YYYYMMDDTHHMM
+                    return datetime.strptime(dt_string, '%Y%m%dT%H%M')
+            else:
+                # Date only format: 20250722
+                if len(dt_string) == 8:  # YYYYMMDD
+                    return datetime.strptime(dt_string, '%Y%m%d')
+            
+            # Fallback to current time if parsing fails
+            app.logger.warning(f"Could not parse datetime: {dt_string}")
+            return datetime.now()
+            
+        except Exception as e:
+            app.logger.warning(f"Error parsing datetime '{dt_string}': {e}")
+            return datetime.now()
     
     def create_event(self, summary, description, start_dt, end_dt):
         """Create a new event"""
