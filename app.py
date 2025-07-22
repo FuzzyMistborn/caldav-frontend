@@ -133,8 +133,8 @@ class CalDAVClient:
             return False
         except Exception as e:
             app.logger.error(f"Error selecting calendar: {e}")
-            return False
-    
+            return False    
+
     def get_events(self, start_date, end_date):
         """Get events within date range"""
         if not self.calendar:
@@ -151,23 +151,70 @@ class CalDAVClient:
             event_list = []
             for event in events:
                 try:
+                    # Add recursion depth protection
+                    import sys
+                    current_recursion_limit = sys.getrecursionlimit()
+                    if current_recursion_limit < 2000:
+                        sys.setrecursionlimit(2000)  # Temporarily increase if needed
+                    
                     cal = Calendar.from_ical(event.data)
+                    
+                    # Reset recursion limit
+                    sys.setrecursionlimit(current_recursion_limit)
+                    
                     for component in cal.walk():
                         if component.name == "VEVENT":
-                            event_data = {
-                                'uid': str(component.get('uid')),
-                                'summary': str(component.get('summary', '')),
-                                'description': str(component.get('description', '')),
-                                'start': component.get('dtstart').dt,
-                                'end': component.get('dtend').dt,
-                                'url': str(event.url)
-                            }
-                            event_list.append(event_data)
+                            try:
+                                # More defensive parsing
+                                uid = component.get('uid')
+                                summary = component.get('summary')
+                                description = component.get('description')
+                                dtstart = component.get('dtstart')
+                                dtend = component.get('dtend')
+                                
+                                # Skip if essential fields are missing
+                                if not uid or not dtstart:
+                                    app.logger.warning(f"Skipping event with missing UID or start date")
+                                    continue
+                                
+                                # Handle missing end date
+                                if not dtend:
+                                    # If no end date, assume 1 hour duration for timed events
+                                    # or same day for all-day events
+                                    if hasattr(dtstart.dt, 'hour'):  # Timed event
+                                        dtend_dt = dtstart.dt + timedelta(hours=1)
+                                    else:  # All-day event
+                                        dtend_dt = dtstart.dt
+                                else:
+                                    dtend_dt = dtend.dt
+                                
+                                event_data = {
+                                    'uid': str(uid) if uid else str(uuid.uuid4()),
+                                    'summary': str(summary) if summary else 'Untitled Event',
+                                    'description': str(description) if description else '',
+                                    'start': dtstart.dt,
+                                    'end': dtend_dt,
+                                    'url': str(event.url)
+                                }
+                                event_list.append(event_data)
+                                break  # Only process first VEVENT component
+                            except Exception as e:
+                                app.logger.error(f"Error parsing event component: {e}")
+                                continue
+                                
+                except RecursionError as e:
+                    app.logger.error(f"Recursion error parsing event: {e}")
+                    continue
                 except Exception as e:
                     app.logger.error(f"Error parsing event: {e}")
                     continue
             
+            app.logger.info(f"Successfully parsed {len(event_list)} events")
             return event_list
+            
+        except RecursionError as e:
+            app.logger.error(f"Recursion error in get_events: {e}")
+            return []
         except Exception as e:
             app.logger.error(f"Error getting events: {e}")
             return []
