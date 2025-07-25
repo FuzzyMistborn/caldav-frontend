@@ -190,6 +190,30 @@ class CalDAVClient:
             if not ical_text or not isinstance(ical_text, str):
                 return []
             
+            # Try using icalendar library first for better RRULE parsing
+            try:
+                from icalendar import Calendar as ICalendar
+                cal = ICalendar.from_ical(ical_text)
+                
+                events = []
+                for component in cal.walk():
+                    if component.name == "VEVENT":
+                        event_data = self.parse_ical_component(component, event_url)
+                        if event_data:
+                            # Handle recurring events
+                            if event_data.get('rrule'):
+                                expanded = self.expand_recurring_event(event_data, start_date, end_date)
+                                events.extend(expanded)
+                            else:
+                                events.append(event_data)
+                
+                if events:
+                    return events
+                    
+            except Exception as ical_error:
+                app.logger.debug(f"iCalendar parsing failed, falling back to manual parsing: {ical_error}")
+            
+            # Fall back to manual parsing
             lines = [line.strip() for line in ical_text.split('\n') if line.strip()]
             
             # Find VEVENT section
@@ -258,6 +282,7 @@ class CalDAVClient:
                             event_data['end'] = parsed_dt
                     elif prop == 'RRULE' and value:
                         event_data['rrule'] = value
+                        app.logger.info(f"Found RRULE: {value}")
                             
                 except Exception as line_error:
                     app.logger.debug(f"Error parsing line '{line[:50]}': {line_error}")
@@ -269,14 +294,72 @@ class CalDAVClient:
             
             # Handle recurring events
             if event_data['rrule']:
+                app.logger.info(f"Expanding recurring event: {event_data['summary']} with RRULE: {event_data['rrule']}")
                 return self.expand_recurring_event(event_data, start_date, end_date)
             else:
-                app.logger.debug(f"Parsed event: {event_data['summary']} from {event_data['start']} to {event_data['end']}")
+                app.logger.debug(f"Parsed single event: {event_data['summary']} from {event_data['start']} to {event_data['end']}")
                 return [event_data]
             
         except Exception as e:
             app.logger.error(f"Error in safe_parse_event: {e}")
             return []
+
+    def parse_ical_component(self, component, event_url):
+        """Parse an iCalendar component into event data"""
+        try:
+            event_data = {
+                'uid': str(component.get('uid', uuid.uuid4())),
+                'summary': str(component.get('summary', 'Untitled Event')),
+                'description': str(component.get('description', '')),
+                'location': str(component.get('location', '')),
+                'url': str(event_url) if event_url else '/unknown',
+                'rrule': None
+            }
+            
+            # Parse dates
+            dtstart = component.get('dtstart')
+            if dtstart:
+                if hasattr(dtstart.dt, 'replace'):
+                    event_data['start'] = dtstart.dt.replace(tzinfo=None) if dtstart.dt.tzinfo else dtstart.dt
+                else:
+                    event_data['start'] = dtstart.dt
+            else:
+                event_data['start'] = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+            
+            dtend = component.get('dtend')
+            if dtend:
+                if hasattr(dtend.dt, 'replace'):
+                    event_data['end'] = dtend.dt.replace(tzinfo=None) if dtend.dt.tzinfo else dtend.dt
+                else:
+                    event_data['end'] = dtend.dt
+            else:
+                event_data['end'] = event_data['start'] + timedelta(hours=1)
+            
+            # Parse RRULE
+            rrule = component.get('rrule')
+            if rrule:
+                # Convert RRULE to string format
+                rrule_str = str(rrule).replace('vRecur(', '').replace(')', '')
+                # Clean up the format
+                parts = []
+                for item in str(rrule).split("'"):
+                    if '=' in item and not item.startswith('v'):
+                        parts.append(item)
+                
+                if parts:
+                    event_data['rrule'] = ';'.join(parts)
+                    app.logger.info(f"Parsed RRULE from component: {event_data['rrule']}")
+                else:
+                    # Fallback to direct string conversion
+                    rrule_dict = rrule.to_ical().decode('utf-8') if hasattr(rrule, 'to_ical') else str(rrule)
+                    event_data['rrule'] = rrule_dict
+                    app.logger.info(f"Fallback RRULE: {event_data['rrule']}")
+            
+            return event_data
+            
+        except Exception as e:
+            app.logger.error(f"Error parsing iCalendar component: {e}")
+            return None
 
     def expand_recurring_event(self, base_event, start_date, end_date):
         """Expand a recurring event into individual occurrences within the date range"""
@@ -284,22 +367,35 @@ class CalDAVClient:
             events = []
             rrule_text = base_event['rrule']
             
-            # Parse RRULE
+            app.logger.info(f"Expanding RRULE: {rrule_text}")
+            
+            # Parse RRULE - handle different formats
             rrule_parts = {}
-            for part in rrule_text.split(';'):
-                if '=' in part:
-                    key, value = part.split('=', 1)
-                    rrule_parts[key] = value
+            
+            # Clean up the RRULE text
+            if rrule_text.startswith('FREQ='):
+                # Standard format: FREQ=WEEKLY;INTERVAL=1;COUNT=5
+                for part in rrule_text.split(';'):
+                    if '=' in part:
+                        key, value = part.split('=', 1)
+                        rrule_parts[key.upper()] = value.upper() if key.upper() in ['FREQ'] else value
+            else:
+                # Handle other formats
+                app.logger.warning(f"Unexpected RRULE format: {rrule_text}")
+                return [base_event]  # Return original event if we can't parse
             
             freq = rrule_parts.get('FREQ', '').upper()
             interval = int(rrule_parts.get('INTERVAL', 1))
             count = int(rrule_parts.get('COUNT', 0)) if rrule_parts.get('COUNT') else None
             until_str = rrule_parts.get('UNTIL', '')
             
+            app.logger.info(f"Parsed RRULE - FREQ: {freq}, INTERVAL: {interval}, COUNT: {count}, UNTIL: {until_str}")
+            
             # Parse UNTIL date if present
             until_date = None
             if until_str:
                 until_date = self.robust_date_parse(until_str)
+                app.logger.info(f"Parsed UNTIL date: {until_date}")
             
             # Calculate event duration
             duration = base_event['end'] - base_event['start']
@@ -307,25 +403,34 @@ class CalDAVClient:
             # Generate occurrences
             current_date = base_event['start']
             occurrence_count = 0
-            max_occurrences = count if count else 1000  # Limit to prevent infinite loops
+            max_occurrences = count if count else 100  # Reasonable limit to prevent infinite loops
             
-            # Ensure we don't go too far back or forward
-            earliest_date = start_date - timedelta(days=730)  # 2 years back
-            latest_date = end_date + timedelta(days=730)  # 2 years forward
+            # Expand the date range to catch events that might overlap
+            expanded_start = start_date - timedelta(days=60)
+            expanded_end = end_date + timedelta(days=60)
+            
+            app.logger.info(f"Generating occurrences from {current_date} with duration {duration}")
             
             while (occurrence_count < max_occurrences and 
-                   current_date <= latest_date and
+                   current_date <= expanded_end and
                    (not until_date or current_date <= until_date)):
                 
-                # Only include if within our query range (with some buffer)
-                if current_date >= earliest_date:
+                event_end = current_date + duration
+                
+                # Check if this occurrence overlaps with our query range
+                if (current_date.date() <= end_date.date() and 
+                    event_end.date() >= start_date.date()):
+                    
                     event_copy = base_event.copy()
                     event_copy['start'] = current_date
-                    event_copy['end'] = current_date + duration
-                    event_copy['uid'] = f"{base_event['uid']}_occurrence_{occurrence_count}"
+                    event_copy['end'] = event_end
+                    event_copy['uid'] = f"{base_event['uid']}_recurrence_{occurrence_count}"
                     event_copy['is_recurring'] = True
                     event_copy['original_uid'] = base_event['uid']
+                    event_copy['recurrence_id'] = occurrence_count
                     events.append(event_copy)
+                    
+                    app.logger.debug(f"Added occurrence {occurrence_count}: {current_date} - {event_end}")
                 
                 occurrence_count += 1
                 
@@ -335,7 +440,7 @@ class CalDAVClient:
                 elif freq == 'WEEKLY':
                     current_date += timedelta(weeks=interval)
                 elif freq == 'MONTHLY':
-                    # Add months (approximate)
+                    # Add months more carefully
                     month = current_date.month
                     year = current_date.year
                     month += interval
@@ -357,7 +462,12 @@ class CalDAVClient:
                         # Handle leap year issues (Feb 29)
                         current_date = current_date.replace(year=current_date.year + interval, day=28)
                 else:
-                    # Unknown frequency, break to avoid infinite loop
+                    app.logger.error(f"Unknown frequency: {freq}")
+                    break
+                
+                # Safety check to prevent infinite loops
+                if occurrence_count > 1000:
+                    app.logger.warning("Too many occurrences generated, stopping")
                     break
             
             app.logger.info(f"Expanded recurring event '{base_event['summary']}' into {len(events)} occurrences")
@@ -365,6 +475,8 @@ class CalDAVClient:
             
         except Exception as e:
             app.logger.error(f"Error expanding recurring event: {e}")
+            import traceback
+            app.logger.error(traceback.format_exc())
             # Return the base event if we can't expand it
             return [base_event]
 
@@ -449,46 +561,64 @@ class CalDAVClient:
             # Add recurrence rule if provided
             if rrule:
                 try:
+                    app.logger.info(f"Adding RRULE to event: {rrule}")
                     # Parse and add RRULE
                     rrule_dict = self.parse_rrule_string(rrule)
                     if rrule_dict:
                         recur = vRecur(rrule_dict)
                         event.add('rrule', recur)
+                        app.logger.info(f"Successfully added RRULE: {rrule_dict}")
+                    else:
+                        app.logger.error(f"Failed to parse RRULE: {rrule}")
                 except Exception as e:
                     app.logger.error(f"Error adding RRULE: {e}")
             
             cal.add_component(event)
             
-            self.calendar.save_event(cal.to_ical())
+            ical_data = cal.to_ical()
+            app.logger.debug(f"Generated iCal data:\n{ical_data.decode('utf-8')}")
+            
+            self.calendar.save_event(ical_data)
             return True
         except Exception as e:
             app.logger.error(f"Error creating event: {e}")
+            import traceback
+            app.logger.error(traceback.format_exc())
             return False
     
     def parse_rrule_string(self, rrule_string):
         """Parse RRULE string into dictionary format"""
         try:
+            app.logger.info(f"Parsing RRULE string: {rrule_string}")
             rrule_dict = {}
             parts = rrule_string.split(';')
             
             for part in parts:
                 if '=' in part:
                     key, value = part.split('=', 1)
-                    key = key.upper()
+                    key = key.upper().strip()
+                    value = value.strip()
                     
                     if key == 'FREQ':
                         rrule_dict[key] = value.upper()
                     elif key in ['INTERVAL', 'COUNT']:
-                        rrule_dict[key] = int(value)
+                        try:
+                            rrule_dict[key] = int(value)
+                        except ValueError:
+                            app.logger.error(f"Invalid integer value for {key}: {value}")
+                            continue
                     elif key == 'UNTIL':
                         # Parse UNTIL date
                         until_date = self.robust_date_parse(value)
                         if until_date:
                             rrule_dict[key] = until_date
+                        else:
+                            app.logger.error(f"Failed to parse UNTIL date: {value}")
                     else:
                         rrule_dict[key] = value
             
-            return rrule_dict
+            app.logger.info(f"Parsed RRULE dict: {rrule_dict}")
+            return rrule_dict if rrule_dict else None
         except Exception as e:
             app.logger.error(f"Error parsing RRULE string: {e}")
             return None
@@ -584,6 +714,65 @@ def debug_info():
         'request_path': request.path,
         'request_url': request.url
     })
+
+@app.route('/api/debug/events')
+def debug_events():
+    """Debug endpoint to see raw event data"""
+    if 'username' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        client = CalDAVClient(session['username'], session['password'], 
+                             session['caldav_url'], session.get('server_type', 'generic'))
+        
+        if not client.connect():
+            return jsonify({'error': 'CalDAV connection failed'}), 500
+        
+        # Get first selected calendar
+        prefs = get_user_preferences()
+        selected_calendars = prefs.get('selected_calendars', [])
+        if not selected_calendars:
+            return jsonify({'error': 'No calendars selected'}), 400
+        
+        if not client.select_calendar(selected_calendars[0]):
+            return jsonify({'error': 'Could not select calendar'}), 500
+        
+        # Get raw calendar objects
+        all_objects = list(client.calendar.objects())
+        debug_info = []
+        
+        for i, obj in enumerate(all_objects[:5]):  # Limit to first 5 for debugging
+            try:
+                raw_data = None
+                if hasattr(obj, 'data') and obj.data is not None:
+                    raw_data = obj.data
+                elif hasattr(obj, 'get_data'):
+                    raw_data = obj.get_data()
+                
+                if raw_data:
+                    if isinstance(raw_data, bytes):
+                        raw_data = raw_data.decode('utf-8', errors='ignore')
+                    
+                    debug_info.append({
+                        'index': i,
+                        'url': str(getattr(obj, 'url', 'unknown')),
+                        'has_rrule': 'RRULE:' in raw_data,
+                        'raw_data': raw_data[:1000] + '...' if len(raw_data) > 1000 else raw_data
+                    })
+            except Exception as e:
+                debug_info.append({
+                    'index': i,
+                    'error': str(e)
+                })
+        
+        return jsonify({
+            'calendar': selected_calendars[0],
+            'total_objects': len(all_objects),
+            'sample_objects': debug_info
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Debug failed: {e}'}), 500
 
 @app.route('/')
 def index():
@@ -808,6 +997,33 @@ def api_create_event():
     # Build RRULE string if recurrence is specified
     rrule = None
     if data.get('recurring') and data.get('recurring') != 'none':
+        rrule_parts = [f"FREQ={data['recurring'].upper()}"]
+        
+        if data.get('recurring_interval') and int(data.get('recurring_interval', 1)) > 1:
+            rrule_parts.append(f"INTERVAL={data['recurring_interval']}")
+        
+        if data.get('recurring_count'):
+            rrule_parts.append(f"COUNT={data['recurring_count']}")
+        elif data.get('recurring_until'):
+            # Convert until date to proper format
+            try:
+                until_date = datetime.fromisoformat(data['recurring_until'] + 'T23:59:59')
+                rrule_parts.append(f"UNTIL={until_date.strftime('%Y%m%dT%H%M%SZ')}")
+            except Exception as e:
+                app.logger.error(f"Error parsing recurring_until date: {e}")
+        
+        rrule = ';'.join(rrule_parts)
+        app.logger.info(f"Generated RRULE for new event: {rrule}")
+    
+    # Create the event
+    success = client.create_event(
+        data.get('title', ''),
+        data.get('description', ''),
+        data.get('location', ''),
+        start_dt,
+        end_dt,
+        rrule
+    )
         rrule_parts = [f"FREQ={data['recurring'].upper()}"]
         
         if data.get('recurring_interval') and int(data.get('recurring_interval', 1)) > 1:

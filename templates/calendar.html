@@ -348,6 +348,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             // Add recurring indicator to title if it's a recurring event
                             if (cleanEvent.extendedProps?.is_recurring) {
                                 cleanEvent.title = '🔄 ' + cleanEvent.title;
+                                cleanEvent.classNames = (cleanEvent.classNames || []).concat(['recurring-event']);
                             }
                             
                             return cleanEvent;

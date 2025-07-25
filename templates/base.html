@@ -379,6 +379,21 @@
             color: #0c5460;
         }
 
+        /* Recurring event styling */
+        .fc-event.recurring-event {
+            border-left: 4px solid #ffc107 !important;
+            position: relative;
+        }
+
+        .fc-event.recurring-event::before {
+            content: "🔄";
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            font-size: 0.7em;
+            opacity: 0.8;
+        }
+
         /* Location input styling */
         .form-label i {
             color: #6c757d;
