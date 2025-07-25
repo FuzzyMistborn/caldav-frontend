@@ -11,13 +11,10 @@ services:
       - FLASK_ENV=production
       - LOG_LEVEL=info
       - PORT=5000
-      # Database Configuration
-      - DATABASE_URL=sqlite:///data/caldav_client.db
       # Session Configuration
       - SESSION_LIFETIME_DAYS=7
-    user: "1000:1000" # Set to your user
     volumes:
-      - YOURPATH/docker/caldav:/app/data
+      - YOURPATH/docker/caldav:/app/data  # Optional: for logs or future use
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]

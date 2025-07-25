@@ -1,6 +1,6 @@
 #!/bin/bash
-# Portable startup script for CalDAV Web Client
-# Automatically adapts to any host system UID/GID
+# Simplified startup script for CalDAV Web Client
+# Session-only storage, no database required
 
 set -e
 
@@ -28,92 +28,25 @@ if [ "$(id -u)" = "0" ]; then
             useradd -u $DATA_UID -g $DATA_GID -d /home/app -m -s /bin/bash app 2>/dev/null || true
         fi
         
-        # Ensure data directory is writable
+        # Ensure data directory is writable (for potential log files or future use)
         chown -R app:app /app/data
         chmod 755 /app/data
         
         # Switch to app user and re-exec this script
         echo "Switching to app user..."
-        exec su app -c "DATABASE_URL=sqlite:////app/data/caldav_client.db exec $0"
+        exec su app -c "exec $0"
     else
         echo "No data directory mounted, creating app user with default UID"
         useradd -u 1000 -d /home/app -m -s /bin/bash app 2>/dev/null || true
         chown -R app:app /app
-        exec su app -c "DATABASE_URL=sqlite:////tmp/caldav_client.db exec $0"
+        exec su app -c "exec $0"
     fi
 else
     echo "Running as non-root user: $(id)"
 fi
 
 # At this point we're running as the app user
-# Determine the best database location
-if [ -w "/app/data" ] 2>/dev/null; then
-    echo "✓ Using /app/data for database storage"
-    export DATABASE_URL="sqlite:////app/data/caldav_client.db"
-    DB_DIR="/app/data"
-elif [ -d "/app/data" ]; then
-    echo "⚠ /app/data exists but not writable, using /tmp"
-    export DATABASE_URL="sqlite:////tmp/caldav_client.db"
-    DB_DIR="/tmp"
-else
-    echo "⚠ No /app/data directory, using /tmp"
-    export DATABASE_URL="sqlite:////tmp/caldav_client.db"
-    DB_DIR="/tmp"
-    mkdir -p /tmp
-fi
-
-echo "Database URL: $DATABASE_URL"
-echo "Database directory: $DB_DIR"
-
-# Test database directory
-if ! touch "$DB_DIR/.test" 2>/dev/null; then
-    echo "✗ Cannot write to database directory: $DB_DIR"
-    exit 1
-else
-    rm -f "$DB_DIR/.test"
-    echo "✓ Database directory is writable"
-fi
-
-# Initialize database
-echo "Initializing database..."
-python3 -c "
-import os
-import sys
-sys.path.insert(0, '/app')
-
-# Ensure DATABASE_URL is set in Python environment
-os.environ['DATABASE_URL'] = '$DATABASE_URL'
-
-try:
-    from app import app, db
-    with app.app_context():
-        # Print actual database URI being used
-        print(f'Database URI: {app.config[\"SQLALCHEMY_DATABASE_URI\"]}')
-        
-        db.create_all()
-        print('✓ Database tables created successfully')
-        
-        # Test database connection
-        result = db.session.execute(db.text('SELECT 1')).scalar()
-        print(f'✓ Database connection test: {result}')
-        
-        # List created tables
-        tables = db.inspect(db.engine).get_table_names()
-        print(f'✓ Created tables: {tables}')
-        
-except Exception as e:
-    print(f'✗ Database initialization failed: {e}')
-    import traceback
-    traceback.print_exc()
-    sys.exit(1)
-"
-
-if [ $? -ne 0 ]; then
-    echo "Database initialization failed, exiting..."
-    exit 1
-fi
-
-echo "✓ Database setup complete"
+echo "✓ Application setup complete"
 
 # Start the application
 echo "Starting application server..."

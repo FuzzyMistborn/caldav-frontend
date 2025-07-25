@@ -33,7 +33,7 @@ Additional Screenshots [here](https://github.com/FuzzyMistborn/caldav-frontend/t
 - **Generic CalDAV** - Works with any RFC-compliant server
 
 ### 🔧 Advanced Features
-- Persistent user preferences stored in SQLite
+- Session-based user preferences (no database required)
 - Session management with configurable lifetime
 - Health check endpoints for monitoring
 - Production-ready with Gunicorn WSGI server
@@ -56,7 +56,6 @@ Builds are available at `ghcr.io/fuzzymistborn/caldav-frontend`.  For now I'm no
 | `CALDAV_SERVER_URL` | Your CalDAV server base URL | - | Yes |
 | `CALDAV_SERVER_TYPE` | Server type (nextcloud, baikal, radicale, generic) | `generic` | No |
 | `SECRET_KEY` | Flask secret key for sessions | Generated | No |
-| `DATABASE_URL` | SQLite database path | `sqlite:///data/caldav_client.db` | No |
 | `SESSION_LIFETIME_DAYS` | Session expiration in days | `7` | No |
 | `FLASK_ENV` | Environment (development/production) | `production` | No |
 | `LOG_LEVEL` | Logging level (debug, info, warning, error) | `info` | No |
@@ -83,19 +82,16 @@ The application provides a REST API for integration:
 - `GET /health` - Health check endpoint
 - `GET /debug` - Debug information (development only)
 
-### User Permissions
+## 🗄️ Data Storage
 
-The container automatically adapts to the mounted volume's ownership:
-
-```yaml
-user: "1000:1000"  # Set to your user ID
-```
+This application uses **session-only storage** - all user preferences and settings are stored in Flask sessions and persist only for the duration of the session (configurable via `SESSION_LIFETIME_DAYS`).
 
 ## 🔐 Security Considerations
 
 1. **Use App Passwords:** For Nextcloud, create dedicated app passwords instead of using your main password
 2. **HTTPS Only:** Always use HTTPS in production to protect credentials
 3. **Secret Key:** Generate a strong secret key for session security
+4. **Session Lifetime:** Configure appropriate session lifetime for your security needs
 
 ## 📄 License
 
