@@ -535,111 +535,6 @@ def api_events():
                          session['caldav_url'], session.get('server_type', 'generic'))
     
     if not client.connect():
-        app.logger.error("CalDAV connection failed")
-        return jsonify({'error': 'CalDAV connection failed'}), 500
-    
-    if not client.select_calendar(calendar_name):
-        app.logger.error(f"Calendar not found: {calendar_name}")
-        return jsonify({'error': f'Calendar "{calendar_name}" not found'}), 500
-    
-    # Update the event
-    success = client.update_event(
-        event_url,
-        data.get('title', ''),
-        data.get('description', ''),
-        start_dt,
-        end_dt
-    )
-    
-    if success:
-        app.logger.info("Event updated successfully")
-        return jsonify({'success': True})
-    else:
-        app.logger.error("Failed to update event")
-        return jsonify({'error': 'Failed to update event'}), 500
-
-@app.route('/api/events/<event_id>', methods=['DELETE'])
-def api_delete_event(event_id):
-    """API endpoint to delete event"""
-    if 'username' not in session:
-        return jsonify({'error': 'Not authenticated'}), 401
-    
-    app.logger.info(f"Deleting event: {event_id}")
-    
-    # Extract calendar name from event ID
-    if ':' in event_id:
-        calendar_name, uid = event_id.split(':', 1)
-    else:
-        prefs = get_user_preferences()
-        selected_calendars = prefs.get('selected_calendars', [])
-        calendar_name = selected_calendars[0] if selected_calendars else None
-        uid = event_id
-    
-    if not calendar_name:
-        return jsonify({'error': 'Cannot determine target calendar'}), 400
-    
-    # Get event URL from request data
-    data = request.get_json() or {}
-    event_url = data.get('url')
-    
-    if not event_url:
-        return jsonify({'error': 'Event URL required for deletion'}), 400
-    
-    # Check CalDAV connection info
-    if not all(key in session for key in ['username', 'password', 'caldav_url']):
-        return jsonify({'error': 'Session incomplete - please log in again'}), 401
-    
-    client = CalDAVClient(session['username'], session['password'], 
-                         session['caldav_url'], session.get('server_type', 'generic'))
-    
-    if not client.connect():
-        app.logger.error("CalDAV connection failed")
-        return jsonify({'error': 'CalDAV connection failed'}), 500
-    
-    if not client.select_calendar(calendar_name):
-        app.logger.error(f"Calendar not found: {calendar_name}")
-        return jsonify({'error': f'Calendar "{calendar_name}" not found'}), 500
-    
-    # Delete the event
-    success = client.delete_event(event_url)
-    
-    if success:
-        app.logger.info("Event deleted successfully")
-        return jsonify({'success': True})
-    else:
-        app.logger.error("Failed to delete event")
-        return jsonify({'error': 'Failed to delete event'}), 500
-
-@app.route('/logout')
-def logout():
-    """Logout and clear session"""
-    session.clear()
-    return redirect(url_for('login'))
-
-@app.errorhandler(404)
-def not_found(error):
-    return jsonify({'error': 'Not found'}), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    app.logger.error(f"Internal error: {error}")
-    return jsonify({'error': 'Internal server error'}), 500
-
-if __name__ == '__main__':
-    # Get port from environment variable or default to 5000
-    port = int(os.environ.get('PORT', 5000))
-    debug = os.environ.get('FLASK_ENV') == 'development'
-    
-    print(f"Starting CalDAV Web Client on 0.0.0.0:{port}")
-    print(f"Debug mode: {debug}")
-    print(f"Registered routes:")
-    for rule in app.url_map.iter_rules():
-        print(f"  {rule.endpoint}: {rule.rule} {list(rule.methods)}")
-    
-    app.run(host='0.0.0.0', port=port, debug=debug)password'], 
-                         session['caldav_url'], session.get('server_type', 'generic'))
-    
-    if not client.connect():
         return jsonify({'error': 'CalDAV connection failed - please check credentials'}), 500
     
     # Get events from all selected calendars
@@ -877,4 +772,109 @@ def api_update_event(event_id):
     if not all(key in session for key in ['username', 'password', 'caldav_url']):
         return jsonify({'error': 'Session incomplete - please log in again'}), 401
     
-    client = CalDAVClient(session['username'], session['
+    client = CalDAVClient(session['username'], session['password'], 
+                         session['caldav_url'], session.get('server_type', 'generic'))
+    
+    if not client.connect():
+        app.logger.error("CalDAV connection failed")
+        return jsonify({'error': 'CalDAV connection failed'}), 500
+    
+    if not client.select_calendar(calendar_name):
+        app.logger.error(f"Calendar not found: {calendar_name}")
+        return jsonify({'error': f'Calendar "{calendar_name}" not found'}), 500
+    
+    # Update the event
+    success = client.update_event(
+        event_url,
+        data.get('title', ''),
+        data.get('description', ''),
+        start_dt,
+        end_dt
+    )
+    
+    if success:
+        app.logger.info("Event updated successfully")
+        return jsonify({'success': True})
+    else:
+        app.logger.error("Failed to update event")
+        return jsonify({'error': 'Failed to update event'}), 500
+
+@app.route('/api/events/<event_id>', methods=['DELETE'])
+def api_delete_event(event_id):
+    """API endpoint to delete event"""
+    if 'username' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    app.logger.info(f"Deleting event: {event_id}")
+    
+    # Extract calendar name from event ID
+    if ':' in event_id:
+        calendar_name, uid = event_id.split(':', 1)
+    else:
+        prefs = get_user_preferences()
+        selected_calendars = prefs.get('selected_calendars', [])
+        calendar_name = selected_calendars[0] if selected_calendars else None
+        uid = event_id
+    
+    if not calendar_name:
+        return jsonify({'error': 'Cannot determine target calendar'}), 400
+    
+    # Get event URL from request data
+    data = request.get_json() or {}
+    event_url = data.get('url')
+    
+    if not event_url:
+        return jsonify({'error': 'Event URL required for deletion'}), 400
+    
+    # Check CalDAV connection info
+    if not all(key in session for key in ['username', 'password', 'caldav_url']):
+        return jsonify({'error': 'Session incomplete - please log in again'}), 401
+    
+    client = CalDAVClient(session['username'], session['password'], 
+                         session['caldav_url'], session.get('server_type', 'generic'))
+    
+    if not client.connect():
+        app.logger.error("CalDAV connection failed")
+        return jsonify({'error': 'CalDAV connection failed'}), 500
+    
+    if not client.select_calendar(calendar_name):
+        app.logger.error(f"Calendar not found: {calendar_name}")
+        return jsonify({'error': f'Calendar "{calendar_name}" not found'}), 500
+    
+    # Delete the event
+    success = client.delete_event(event_url)
+    
+    if success:
+        app.logger.info("Event deleted successfully")
+        return jsonify({'success': True})
+    else:
+        app.logger.error("Failed to delete event")
+        return jsonify({'error': 'Failed to delete event'}), 500
+
+@app.route('/logout')
+def logout():
+    """Logout and clear session"""
+    session.clear()
+    return redirect(url_for('login'))
+
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'error': 'Not found'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    app.logger.error(f"Internal error: {error}")
+    return jsonify({'error': 'Internal server error'}), 500
+
+if __name__ == '__main__':
+    # Get port from environment variable or default to 5000
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_ENV') == 'development'
+    
+    print(f"Starting CalDAV Web Client on 0.0.0.0:{port}")
+    print(f"Debug mode: {debug}")
+    print(f"Registered routes:")
+    for rule in app.url_map.iter_rules():
+        print(f"  {rule.endpoint}: {rule.rule} {list(rule.methods)}")
+    
+    app.run(host='0.0.0.0', port=port, debug=debug)
