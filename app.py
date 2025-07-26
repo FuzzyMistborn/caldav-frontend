@@ -712,13 +712,63 @@ class CalDAVClient:
             return False
     
     def delete_event(self, event_url):
-        """Delete an event"""
+        """Delete an event with debugging"""
         try:
-            event = self.calendar.event_by_url(event_url)
-            event.delete()
-            return True
+            print(f"DEBUG: delete_event called with URL: {event_url}")
+            
+            if not self.calendar:
+                print("DEBUG: No calendar selected")
+                return False
+            
+            print(f"DEBUG: Attempting to find event by URL")
+            
+            # Try to get the event object
+            try:
+                event = self.calendar.event_by_url(event_url)
+                print(f"DEBUG: Found event object: {event}")
+            except Exception as e:
+                print(f"DEBUG: Error finding event by URL: {e}")
+                # Try alternative approach - find by searching all events
+                print("DEBUG: Trying alternative approach to find event")
+                
+                try:
+                    all_objects = list(self.calendar.objects())
+                    print(f"DEBUG: Found {len(all_objects)} total objects in calendar")
+                    
+                    for i, obj in enumerate(all_objects):
+                        try:
+                            obj_url = getattr(obj, 'url', None) or getattr(obj, 'canonical_url', None)
+                            if obj_url and str(obj_url) == event_url:
+                                print(f"DEBUG: Found matching event at index {i}")
+                                event = obj
+                                break
+                        except Exception as obj_e:
+                            print(f"DEBUG: Error checking object {i}: {obj_e}")
+                            continue
+                    else:
+                        print(f"DEBUG: No event found with URL: {event_url}")
+                        return False
+                        
+                except Exception as search_e:
+                    print(f"DEBUG: Error searching for event: {search_e}")
+                    return False
+            
+            # Try to delete the event
+            try:
+                print(f"DEBUG: Attempting to delete event")
+                event.delete()
+                print(f"DEBUG: Event deleted successfully")
+                return True
+            except Exception as delete_e:
+                print(f"DEBUG: Error deleting event: {delete_e}")
+                import traceback
+                print(f"DEBUG: Delete traceback: {traceback.format_exc()}")
+                return False
+                
         except Exception as e:
-            app.logger.error(f"Error deleting event: {e}")
+            print(f"DEBUG: Error in delete_event: {e}")
+            import traceback
+            print(f"DEBUG: Full traceback: {traceback.format_exc()}")
             return False
 
     def delete_recurring_occurrence(self, event_url, original_uid, event_date):
@@ -1414,94 +1464,142 @@ def api_update_event(event_id):
 
     @app.route('/api/events/<event_id>', methods=['DELETE'])
     def api_delete_event(event_id):
-        """API endpoint to delete event with recurring options and improved error handling"""
+        """API endpoint to delete event with extensive debugging"""
+        print(f"DEBUG: Delete request received for event_id: {event_id}")
+        
         if 'username' not in session:
+            print("DEBUG: User not authenticated")
             return jsonify({'error': 'Not authenticated'}), 401
         
-        app.logger.info(f"Delete request for event ID: {event_id}")
+        print(f"DEBUG: User authenticated: {session['username']}")
         
         # Extract calendar name from event ID
         if ':' in event_id:
             calendar_name, uid = event_id.split(':', 1)
+            print(f"DEBUG: Extracted calendar_name: {calendar_name}, uid: {uid}")
         else:
             prefs = get_user_preferences()
             selected_calendars = prefs.get('selected_calendars', [])
             calendar_name = selected_calendars[0] if selected_calendars else None
             uid = event_id
+            print(f"DEBUG: Using first selected calendar: {calendar_name}, uid: {uid}")
         
         if not calendar_name:
-            app.logger.error("Cannot determine target calendar")
+            print("DEBUG: Cannot determine target calendar")
             return jsonify({'error': 'Cannot determine target calendar'}), 400
         
         # Get event URL and delete options from request data
-        data = request.get_json() or {}
+        try:
+            data = request.get_json() or {}
+            print(f"DEBUG: Request data: {data}")
+        except Exception as e:
+            print(f"DEBUG: Error parsing request JSON: {e}")
+            return jsonify({'error': 'Invalid JSON data'}), 400
+        
         event_url = data.get('url')
         delete_type = data.get('deleteType', 'single')
         event_date = data.get('eventDate')
         original_uid = data.get('originalUid')
         
-        app.logger.info(f"Delete type: {delete_type}, Event URL: {event_url}, Event date: {event_date}, Original UID: {original_uid}")
+        print(f"DEBUG: Delete parameters - Type: {delete_type}, URL: {event_url}, Date: {event_date}, Original UID: {original_uid}")
         
         if not event_url:
-            app.logger.error("Event URL required for deletion")
+            print("DEBUG: Event URL is missing")
             return jsonify({'error': 'Event URL required for deletion'}), 400
         
         # Check CalDAV connection info
-        if not all(key in session for key in ['username', 'password', 'caldav_url']):
-            app.logger.error("Session incomplete - missing CalDAV credentials")
+        required_session_keys = ['username', 'password', 'caldav_url']
+        missing_keys = [key for key in required_session_keys if key not in session]
+        if missing_keys:
+            print(f"DEBUG: Missing session keys: {missing_keys}")
             return jsonify({'error': 'Session incomplete - please log in again'}), 401
         
-        client = CalDAVClient(session['username'], session['password'], 
-                            session['caldav_url'], session.get('server_type', 'generic'))
+        print(f"DEBUG: Creating CalDAV client for {session['username']} at {session['caldav_url']}")
         
-        if not client.connect():
-            app.logger.error("CalDAV connection failed")
-            return jsonify({'error': 'CalDAV connection failed'}), 500
+        try:
+            client = CalDAVClient(session['username'], session['password'], 
+                                session['caldav_url'], session.get('server_type', 'generic'))
+            print("DEBUG: CalDAV client created successfully")
+        except Exception as e:
+            print(f"DEBUG: Error creating CalDAV client: {e}")
+            return jsonify({'error': f'Error creating CalDAV client: {str(e)}'}), 500
         
-        if not client.select_calendar(calendar_name):
-            app.logger.error(f"Calendar not found: {calendar_name}")
-            return jsonify({'error': f'Calendar "{calendar_name}" not found'}), 500
+        try:
+            if not client.connect():
+                print("DEBUG: CalDAV connection failed")
+                return jsonify({'error': 'CalDAV connection failed'}), 500
+            print("DEBUG: CalDAV connection successful")
+        except Exception as e:
+            print(f"DEBUG: Exception during CalDAV connection: {e}")
+            return jsonify({'error': f'CalDAV connection error: {str(e)}'}), 500
+        
+        try:
+            if not client.select_calendar(calendar_name):
+                print(f"DEBUG: Calendar selection failed: {calendar_name}")
+                return jsonify({'error': f'Calendar "{calendar_name}" not found'}), 500
+            print(f"DEBUG: Calendar selected successfully: {calendar_name}")
+        except Exception as e:
+            print(f"DEBUG: Exception during calendar selection: {e}")
+            return jsonify({'error': f'Calendar selection error: {str(e)}'}), 500
         
         # Handle different delete types
         success = False
+        error_message = None
+        
         try:
+            print(f"DEBUG: Starting deletion process for type: {delete_type}")
+            
             if delete_type == 'single':
-                app.logger.info("Performing single event deletion")
+                print("DEBUG: Attempting single event deletion")
                 success = client.delete_event(event_url)
+                print(f"DEBUG: Single deletion result: {success}")
+                
             elif delete_type == 'this':
-                app.logger.info("Performing single occurrence deletion of recurring event")
+                print("DEBUG: Attempting single occurrence deletion of recurring event")
                 if not original_uid or not event_date:
-                    app.logger.error("Missing original_uid or event_date for recurring deletion")
-                    return jsonify({'error': 'Missing original UID or event date for recurring deletion'}), 400
+                    error_message = 'Missing original UID or event date for recurring deletion'
+                    print(f"DEBUG: {error_message}")
+                    return jsonify({'error': error_message}), 400
                 success = client.delete_recurring_occurrence(event_url, original_uid, event_date)
+                print(f"DEBUG: Recurring occurrence deletion result: {success}")
+                
             elif delete_type == 'future':
-                app.logger.info("Performing future occurrences deletion")
+                print("DEBUG: Attempting future occurrences deletion")
                 if not original_uid or not event_date:
-                    app.logger.error("Missing original_uid or event_date for future deletion")
-                    return jsonify({'error': 'Missing original UID or event date for future deletion'}), 400
+                    error_message = 'Missing original UID or event date for future deletion'
+                    print(f"DEBUG: {error_message}")
+                    return jsonify({'error': error_message}), 400
                 success = client.delete_recurring_future(event_url, original_uid, event_date)
+                print(f"DEBUG: Future deletion result: {success}")
+                
             elif delete_type == 'all':
-                app.logger.info("Performing entire series deletion")
+                print("DEBUG: Attempting entire series deletion")
                 if not original_uid:
-                    app.logger.error("Missing original_uid for series deletion")
-                    return jsonify({'error': 'Missing original UID for series deletion'}), 400
+                    error_message = 'Missing original UID for series deletion'
+                    print(f"DEBUG: {error_message}")
+                    return jsonify({'error': error_message}), 400
                 success = client.delete_recurring_series(original_uid)
+                print(f"DEBUG: Series deletion result: {success}")
+                
             else:
-                app.logger.error(f"Invalid delete type: {delete_type}")
-                return jsonify({'error': 'Invalid delete type'}), 400
+                error_message = f'Invalid delete type: {delete_type}'
+                print(f"DEBUG: {error_message}")
+                return jsonify({'error': error_message}), 400
             
             if success:
-                app.logger.info(f"Event deletion successful: {delete_type}")
+                print(f"DEBUG: Event deletion successful for type: {delete_type}")
                 return jsonify({'success': True})
             else:
-                app.logger.error(f"Event deletion failed: {delete_type}")
-                return jsonify({'error': 'Failed to delete event'}), 500
+                error_message = f'Failed to delete event (type: {delete_type})'
+                print(f"DEBUG: {error_message}")
+                return jsonify({'error': error_message}), 500
                 
         except Exception as e:
-            app.logger.error(f"Exception during event deletion: {e}")
+            error_message = f'Exception during deletion: {str(e)}'
+            print(f"DEBUG: {error_message}")
             import traceback
-            app.logger.error(traceback.format_exc())
-            return jsonify({'error': f'Error during deletion: {str(e)}'}), 500
+            print(f"DEBUG: Full traceback: {traceback.format_exc()}")
+            return jsonify({'error': error_message}), 500
 
 @app.route('/logout')
 def logout():
