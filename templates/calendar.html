@@ -1,4 +1,6 @@
-{% extends "base.html" %}
+document.getElementById('deleteEventBtn').addEventListener('click', function() {
+        const eventId = document.getElementById('eventId').value;
+        const eventUrl = document.getElementByI{% extends "base.html" %}
 
 {% block title %}Calendar - CalDAV Web Client{% endblock %}
 
@@ -248,6 +250,8 @@
                     
                     <input type="hidden" id="eventId">
                     <input type="hidden" id="eventUrl">
+                    <input type="hidden" id="isRecurringEvent">
+                    <input type="hidden" id="eventOriginalUid">
                 </form>
             </div>
             <div class="modal-footer">
@@ -264,6 +268,62 @@
         </div>
     </div>
 </div>
+
+<!-- Recurring Event Delete Options Modal -->
+<div class="modal fade" id="recurringDeleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle me-2"></i>Delete Recurring Event
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-3">This is a recurring event. How would you like to delete it?</p>
+                
+                <div class="mb-3">
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="deleteOption" id="deleteThisOnly" value="this" checked>
+                        <label class="form-check-label" for="deleteThisOnly">
+                            <strong>Delete only this event</strong>
+                            <br><small class="text-muted">Only this specific occurrence will be deleted</small>
+                        </label>
+                    </div>
+                    
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="deleteOption" id="deleteThisAndFuture" value="future">
+                        <label class="form-check-label" for="deleteThisAndFuture">
+                            <strong>Delete this and future events</strong>
+                            <br><small class="text-muted">Delete this occurrence and all future occurrences</small>
+                        </label>
+                    </div>
+                    
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="deleteOption" id="deleteAllEvents" value="all">
+                        <label class="form-check-label" for="deleteAllEvents">
+                            <strong>Delete all events in the series</strong>
+                            <br><small class="text-muted">Delete the entire recurring event series</small>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Warning:</strong> This action cannot be undone.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Cancel
+                </button>
+                <button type="button" class="btn btn-danger" id="confirmRecurringDeleteBtn">
+                    <i class="fas fa-trash me-1"></i>Delete Event(s)
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -273,6 +333,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const calendarListEl = document.getElementById('calendarList');
     const eventModal = new bootstrap.Modal(document.getElementById('eventModal'));
     const settingsModal = new bootstrap.Modal(document.getElementById('settingsModal'));
+    const recurringDeleteModal = new bootstrap.Modal(document.getElementById('recurringDeleteModal'));
     
     document.getElementById('eventModal').addEventListener('shown.bs.modal', function () {
         document.getElementById('eventTitle').focus();
@@ -1033,32 +1094,66 @@ document.addEventListener('DOMContentLoaded', function() {
         const eventId = document.getElementById('eventId').value;
         const eventUrl = document.getElementById('eventUrl').value;
         const title = document.getElementById('eventTitle').value;
+        const isRecurring = document.getElementById('isRecurringEvent').value === 'true';
 
         if (!eventId || !eventUrl) {
             showToast('Cannot delete event: missing event information', 'error');
             return;
         }
 
+        // If it's a recurring event, show the recurring delete modal
+        if (isRecurring) {
+            eventModal.hide();
+            recurringDeleteModal.show();
+            return;
+        }
+
+        // For non-recurring events, show simple confirmation
         if (!confirm(`Are you sure you want to delete "${title}"?`)) {
             return;
         }
 
+        performEventDeletion(eventId, eventUrl, 'single');
+    });
+
+    // Handle recurring delete confirmation
+    document.getElementById('confirmRecurringDeleteBtn').addEventListener('click', function() {
+        const eventId = document.getElementById('eventId').value;
+        const eventUrl = document.getElementById('eventUrl').value;
+        const deleteOption = document.querySelector('input[name="deleteOption"]:checked').value;
+        
+        recurringDeleteModal.hide();
+        performEventDeletion(eventId, eventUrl, deleteOption);
+    });
+
+    function performEventDeletion(eventId, eventUrl, deleteType) {
         const deleteBtn = document.getElementById('deleteEventBtn');
+        const confirmBtn = document.getElementById('confirmRecurringDeleteBtn');
         const originalText = deleteBtn.textContent;
+        
         deleteBtn.disabled = true;
+        confirmBtn.disabled = true;
         deleteBtn.textContent = 'Deleting...';
+
+        const requestData = { url: eventUrl };
+        
+        // Add delete type and event date for recurring events
+        if (deleteType !== 'single') {
+            requestData.deleteType = deleteType;
+            requestData.eventDate = document.getElementById('eventStartDate').value;
+            requestData.originalUid = document.getElementById('eventOriginalUid').value;
+        }
 
         fetch(`/api/events/${eventId}`, {
             method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ url: eventUrl })
+            body: JSON.stringify(requestData)
         })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                eventModal.hide();
                 calendar.refetchEvents();
                 showToast('Event deleted successfully!', 'success');
             } else {
@@ -1071,9 +1166,10 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .finally(() => {
             deleteBtn.disabled = false;
+            confirmBtn.disabled = false;
             deleteBtn.textContent = originalText;
         });
-    });
+    }
 
     document.getElementById('allDayEvent').addEventListener('change', function() {
         toggleTimeInputs(this.checked);

@@ -721,6 +721,121 @@ class CalDAVClient:
             app.logger.error(f"Error deleting event: {e}")
             return False
 
+    def delete_recurring_occurrence(self, event_url, original_uid, event_date):
+        """Delete only a specific occurrence of a recurring event"""
+        try:
+            # Find the original recurring event by UID
+            original_event = self.find_event_by_uid(original_uid)
+            if not original_event:
+                return False
+            
+            # Add an EXDATE (exception date) to exclude this occurrence
+            cal = Calendar.from_ical(original_event.data)
+            
+            for component in cal.walk():
+                if component.name == "VEVENT":
+                    # Parse the event date
+                    exception_date = datetime.fromisoformat(event_date).date()
+                    
+                    # Add EXDATE property
+                    if 'exdate' in component:
+                        # Add to existing EXDATE
+                        existing_exdates = component['exdate']
+                        if not isinstance(existing_exdates, list):
+                            existing_exdates = [existing_exdates]
+                        existing_exdates.append(exception_date)
+                        component['exdate'] = existing_exdates
+                    else:
+                        # Create new EXDATE
+                        component.add('exdate', exception_date)
+                    break
+            
+            original_event.data = cal.to_ical()
+            original_event.save()
+            return True
+        except Exception as e:
+            app.logger.error(f"Error deleting recurring occurrence: {e}")
+            return False
+
+    def delete_recurring_future(self, event_url, original_uid, event_date):
+        """Delete this occurrence and all future occurrences"""
+        try:
+            # Find the original recurring event by UID
+            original_event = self.find_event_by_uid(original_uid)
+            if not original_event:
+                return False
+            
+            # Modify the RRULE to end before this date
+            cal = Calendar.from_ical(original_event.data)
+            
+            for component in cal.walk():
+                if component.name == "VEVENT":
+                    # Parse the event date and set UNTIL to day before
+                    until_date = datetime.fromisoformat(event_date) - timedelta(days=1)
+                    
+                    # Get existing RRULE
+                    rrule = component.get('rrule')
+                    if rrule:
+                        # Convert to dict and modify
+                        rrule_dict = {}
+                        for key, value in rrule.items():
+                            rrule_dict[key] = value
+                        
+                        # Set UNTIL date and remove COUNT if present
+                        rrule_dict['UNTIL'] = until_date
+                        if 'COUNT' in rrule_dict:
+                            del rrule_dict['COUNT']
+                        
+                        # Update the component
+                        new_recur = vRecur(rrule_dict)
+                        component['rrule'] = new_recur
+                    break
+            
+            original_event.data = cal.to_ical()
+            original_event.save()
+            return True
+        except Exception as e:
+            app.logger.error(f"Error deleting future recurring events: {e}")
+            return False
+
+    def delete_recurring_series(self, original_uid):
+        """Delete the entire recurring event series"""
+        try:
+            # Find the original recurring event by UID
+            original_event = self.find_event_by_uid(original_uid)
+            if not original_event:
+                return False
+            
+            # Delete the entire event
+            original_event.delete()
+            return True
+        except Exception as e:
+            app.logger.error(f"Error deleting recurring series: {e}")
+            return False
+
+    def find_event_by_uid(self, uid):
+        """Find an event by its UID"""
+        try:
+            # Clean the UID (remove recurrence suffix if present)
+            clean_uid = uid.split('_recurrence_')[0] if '_recurrence_' in uid else uid
+            
+            all_objects = list(self.calendar.objects())
+            for obj in all_objects:
+                try:
+                    raw_data = obj.data
+                    if isinstance(raw_data, bytes):
+                        raw_data = raw_data.decode('utf-8', errors='ignore')
+                    
+                    if f'UID:{clean_uid}' in raw_data:
+                        return obj
+                except Exception:
+                    continue
+            
+            return None
+        except Exception as e:
+            app.logger.error(f"Error finding event by UID: {e}")
+            return None
+
 def get_caldav_url(username, base_url, server_type):
     """Generate CalDAV URL based on server type"""
     pattern = CALDAV_URL_PATTERNS.get(server_type, CALDAV_URL_PATTERNS['generic'])
@@ -1180,11 +1295,9 @@ def api_update_event(event_id):
 
 @app.route('/api/events/<event_id>', methods=['DELETE'])
 def api_delete_event(event_id):
-    """API endpoint to delete event"""
+    """API endpoint to delete event with recurring options"""
     if 'username' not in session:
         return jsonify({'error': 'Not authenticated'}), 401
-    
-    app.logger.info(f"Deleting event: {event_id}")
     
     # Extract calendar name from event ID
     if ':' in event_id:
@@ -1198,9 +1311,12 @@ def api_delete_event(event_id):
     if not calendar_name:
         return jsonify({'error': 'Cannot determine target calendar'}), 400
     
-    # Get event URL from request data
+    # Get event URL and delete options from request data
     data = request.get_json() or {}
     event_url = data.get('url')
+    delete_type = data.get('deleteType', 'single')
+    event_date = data.get('eventDate')
+    original_uid = data.get('originalUid')
     
     if not event_url:
         return jsonify({'error': 'Event URL required for deletion'}), 400
@@ -1213,21 +1329,30 @@ def api_delete_event(event_id):
                          session['caldav_url'], session.get('server_type', 'generic'))
     
     if not client.connect():
-        app.logger.error("CalDAV connection failed")
         return jsonify({'error': 'CalDAV connection failed'}), 500
     
     if not client.select_calendar(calendar_name):
-        app.logger.error(f"Calendar not found: {calendar_name}")
         return jsonify({'error': f'Calendar "{calendar_name}" not found'}), 500
     
-    # Delete the event
-    success = client.delete_event(event_url)
+    # Handle different delete types
+    if delete_type == 'single':
+        # Delete only this occurrence (for non-recurring or single occurrence)
+        success = client.delete_event(event_url)
+    elif delete_type == 'this':
+        # Delete only this specific occurrence of a recurring event
+        success = client.delete_recurring_occurrence(event_url, original_uid, event_date)
+    elif delete_type == 'future':
+        # Delete this and all future occurrences
+        success = client.delete_recurring_future(event_url, original_uid, event_date)
+    elif delete_type == 'all':
+        # Delete entire recurring series
+        success = client.delete_recurring_series(original_uid)
+    else:
+        return jsonify({'error': 'Invalid delete type'}), 400
     
     if success:
-        app.logger.info("Event deleted successfully")
         return jsonify({'success': True})
     else:
-        app.logger.error("Failed to delete event")
         return jsonify({'error': 'Failed to delete event'}), 500
 
 @app.route('/logout')
