@@ -1024,30 +1024,6 @@ def api_create_event():
         end_dt,
         rrule
     )
-        rrule_parts = [f"FREQ={data['recurring'].upper()}"]
-        
-        if data.get('recurring_interval') and int(data.get('recurring_interval', 1)) > 1:
-            rrule_parts.append(f"INTERVAL={data['recurring_interval']}")
-        
-        if data.get('recurring_count'):
-            rrule_parts.append(f"COUNT={data['recurring_count']}")
-        elif data.get('recurring_until'):
-            # Convert until date to proper format
-            until_date = datetime.fromisoformat(data['recurring_until'] + 'T23:59:59')
-            rrule_parts.append(f"UNTIL={until_date.strftime('%Y%m%dT%H%M%SZ')}")
-        
-        rrule = ';'.join(rrule_parts)
-        app.logger.info(f"Generated RRULE: {rrule}")
-    
-    # Create the event
-    success = client.create_event(
-        data.get('title', ''),
-        data.get('description', ''),
-        data.get('location', ''),
-        start_dt,
-        end_dt,
-        rrule
-    )
     
     if success:
         app.logger.info("Event created successfully")
@@ -1195,8 +1171,11 @@ def api_update_event(event_id):
             rrule_parts.append(f"COUNT={data['recurring_count']}")
         elif data.get('recurring_until'):
             # Convert until date to proper format
-            until_date = datetime.fromisoformat(data['recurring_until'] + 'T23:59:59')
-            rrule_parts.append(f"UNTIL={until_date.strftime('%Y%m%dT%H%M%SZ')}")
+            try:
+                until_date = datetime.fromisoformat(data['recurring_until'] + 'T23:59:59')
+                rrule_parts.append(f"UNTIL={until_date.strftime('%Y%m%dT%H%M%SZ')}")
+            except Exception as e:
+                app.logger.error(f"Error parsing recurring_until date: {e}")
         
         rrule = ';'.join(rrule_parts)
         app.logger.info(f"Generated RRULE for update: {rrule}")
