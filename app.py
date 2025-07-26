@@ -405,6 +405,16 @@ class CalDAVClient:
             occurrence_count = 0
             max_occurrences = count if count else 100  # Reasonable limit to prevent infinite loops
             
+            # Ensure all dates are timezone-naive for comparison
+            if hasattr(start_date, 'tzinfo') and start_date.tzinfo:
+                start_date = start_date.replace(tzinfo=None)
+            if hasattr(end_date, 'tzinfo') and end_date.tzinfo:
+                end_date = end_date.replace(tzinfo=None)
+            if hasattr(current_date, 'tzinfo') and current_date.tzinfo:
+                current_date = current_date.replace(tzinfo=None)
+            if until_date and hasattr(until_date, 'tzinfo') and until_date.tzinfo:
+                until_date = until_date.replace(tzinfo=None)
+            
             # Expand the date range to catch events that might overlap
             expanded_start = start_date - timedelta(days=60)
             expanded_end = end_date + timedelta(days=60)
@@ -544,6 +554,12 @@ class CalDAVClient:
             return False
         
         try:
+            # Ensure timezone-naive datetimes for CalDAV compatibility
+            if hasattr(start_dt, 'tzinfo') and start_dt.tzinfo:
+                start_dt = start_dt.replace(tzinfo=None)
+            if hasattr(end_dt, 'tzinfo') and end_dt.tzinfo:
+                end_dt = end_dt.replace(tzinfo=None)
+            
             cal = Calendar()
             cal.add('prodid', '-//CalDAV Web Client//Enhanced//')
             cal.add('version', '2.0')
@@ -555,7 +571,7 @@ class CalDAVClient:
                 event.add('location', location)
             event.add('dtstart', start_dt)
             event.add('dtend', end_dt)
-            event.add('dtstamp', datetime.now(pytz.UTC))
+            event.add('dtstamp', datetime.now(pytz.UTC).replace(tzinfo=None))
             event.add('uid', str(uuid.uuid4()))
             
             # Add recurrence rule if provided
@@ -631,15 +647,26 @@ class CalDAVClient:
             
             for component in cal.walk():
                 if component.name == "VEVENT":
+                    # Update basic properties
                     component['summary'] = summary
                     component['description'] = description
+                    
+                    # Handle location
                     if location:
                         component['location'] = location
                     elif 'location' in component:
                         del component['location']
+                    
+                    # Ensure timezone-naive datetimes for CalDAV compatibility
+                    if hasattr(start_dt, 'tzinfo') and start_dt.tzinfo:
+                        start_dt = start_dt.replace(tzinfo=None)
+                    if hasattr(end_dt, 'tzinfo') and end_dt.tzinfo:
+                        end_dt = end_dt.replace(tzinfo=None)
+                    
+                    # Update dates - ensure they exist
                     component['dtstart'] = start_dt
                     component['dtend'] = end_dt
-                    component['dtstamp'] = datetime.now(pytz.UTC)
+                    component['dtstamp'] = datetime.now(pytz.UTC).replace(tzinfo=None)
                     
                     # Handle recurrence rule
                     if rrule:
@@ -648,6 +675,7 @@ class CalDAVClient:
                             if rrule_dict:
                                 recur = vRecur(rrule_dict)
                                 component['rrule'] = recur
+                                app.logger.info(f"Updated RRULE: {rrule_dict}")
                         except Exception as e:
                             app.logger.error(f"Error updating RRULE: {e}")
                     elif 'rrule' in component:
@@ -655,11 +683,17 @@ class CalDAVClient:
                     
                     break
             
-            event.data = cal.to_ical()
+            # Generate and log the updated iCal data for debugging
+            updated_ical = cal.to_ical()
+            app.logger.debug(f"Updated iCal data:\n{updated_ical.decode('utf-8')}")
+            
+            event.data = updated_ical
             event.save()
             return True
         except Exception as e:
             app.logger.error(f"Error updating event: {e}")
+            import traceback
+            app.logger.error(traceback.format_exc())
             return False
     
     def delete_event(self, event_url):
