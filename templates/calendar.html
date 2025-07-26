@@ -949,12 +949,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Event handlers - moved to after all functions are defined
     document.getElementById('saveSettingsBtn').addEventListener('click', function() {
-        console.log('Save Settings button clicked');
         
         const weekStart = parseInt(document.getElementById('weekStart').value);
         const defaultCalendar = document.getElementById('defaultCalendar').value;
-        
-        console.log('Settings to save:', { weekStart, defaultCalendar, calendar_colors: userSettings.calendar_colors });
         
         // Disable button during save
         const saveBtn = this;
@@ -972,11 +969,9 @@ document.addEventListener('DOMContentLoaded', function() {
             })
         })
         .then(response => {
-            console.log('Settings save response status:', response.status);
             return response.json();
         })
         .then(data => {
-            console.log('Settings save response data:', data);
             if (data.success) {
                 userSettings.default_calendar = defaultCalendar;
                 calendar.setOption('firstDay', weekStart);
