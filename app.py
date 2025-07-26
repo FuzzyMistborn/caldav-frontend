@@ -1,4 +1,49 @@
-#!/usr/bin/env python3
+def create_event(self, summary, description, location, start_dt, end_dt, rrule=None):
+        """Create a new event with optional recurrence and location"""
+        if not self.calendar:
+            return False
+        
+        try:
+            # Ensure timezone-naive datetimes for CalDAV compatibility
+            if hasattr(start_dt, 'tzinfo') and start_dt.tzinfo:
+                start_dt = start_dt.replace(tzinfo=None)
+            if hasattr(end_dt, 'tzinfo') and end_dt.tzinfo:
+                end_dt = end_dt.replace(tzinfo=None)
+            
+            cal = Calendar()
+            cal.add('prodid', '-//CalDAV Web Client//Enhanced//')
+            cal.add('version', '2.0')
+            
+            event = ICalEvent()
+            event.add('summary', summary)
+            event.add('description', description)
+            if location:
+                event.add('location', location)
+            event.add('dtstart', start_dt)
+            event.add('dtend', end_dt)
+            event.add('dtstamp', datetime.now(pytz.UTC).replace(tzinfo=None))
+            event.add('uid', str(uuid.uuid4()))
+            
+            # Add recurrence rule if provided
+            if rrule:
+                try:
+                    # Parse and add RRULE
+                    rrule_dict = self.parse_rrule_string(rrule)
+                    if rrule_dict:
+                        recur = vRecur(rrule_dict)
+                        event.add('rrule', recur)
+                except Exception as e:
+                    app.logger.error(f"Error adding RRULE: {e}")
+            
+            cal.add_component(event)
+            
+            ical_data = cal.to_ical()
+            
+            self.calendar.save_event(ical_data)
+            return True
+        except Exception as e:
+            app.logger.error(f"Error creating event: {e}")
+            return False#!/usr/bin/env python3
 """
 CalDAV Web Client for Nextcloud
 A Flask-based web application for managing calendar events via CalDAV
@@ -230,7 +275,6 @@ class CalDAVClient:
                     vevent_lines.append(line)
             
             if not vevent_lines:
-                app.logger.debug("No VEVENT section found")
                 return []
             
             # Initialize with safe defaults
@@ -282,7 +326,6 @@ class CalDAVClient:
                             event_data['end'] = parsed_dt
                     elif prop == 'RRULE' and value:
                         event_data['rrule'] = value
-                        app.logger.info(f"Found RRULE: {value}")
                             
                 except Exception as line_error:
                     app.logger.debug(f"Error parsing line '{line[:50]}': {line_error}")
@@ -294,10 +337,8 @@ class CalDAVClient:
             
             # Handle recurring events
             if event_data['rrule']:
-                app.logger.info(f"Expanding recurring event: {event_data['summary']} with RRULE: {event_data['rrule']}")
                 return self.expand_recurring_event(event_data, start_date, end_date)
             else:
-                app.logger.debug(f"Parsed single event: {event_data['summary']} from {event_data['start']} to {event_data['end']}")
                 return [event_data]
             
         except Exception as e:
@@ -348,12 +389,10 @@ class CalDAVClient:
                 
                 if parts:
                     event_data['rrule'] = ';'.join(parts)
-                    app.logger.info(f"Parsed RRULE from component: {event_data['rrule']}")
                 else:
                     # Fallback to direct string conversion
                     rrule_dict = rrule.to_ical().decode('utf-8') if hasattr(rrule, 'to_ical') else str(rrule)
                     event_data['rrule'] = rrule_dict
-                    app.logger.info(f"Fallback RRULE: {event_data['rrule']}")
             
             return event_data
             
@@ -367,8 +406,6 @@ class CalDAVClient:
             events = []
             rrule_text = base_event['rrule']
             
-            app.logger.info(f"Expanding RRULE: {rrule_text}")
-            
             # Parse RRULE - handle different formats
             rrule_parts = {}
             
@@ -381,7 +418,6 @@ class CalDAVClient:
                         rrule_parts[key.upper()] = value.upper() if key.upper() in ['FREQ'] else value
             else:
                 # Handle other formats
-                app.logger.warning(f"Unexpected RRULE format: {rrule_text}")
                 return [base_event]  # Return original event if we can't parse
             
             freq = rrule_parts.get('FREQ', '').upper()
@@ -389,13 +425,10 @@ class CalDAVClient:
             count = int(rrule_parts.get('COUNT', 0)) if rrule_parts.get('COUNT') else None
             until_str = rrule_parts.get('UNTIL', '')
             
-            app.logger.info(f"Parsed RRULE - FREQ: {freq}, INTERVAL: {interval}, COUNT: {count}, UNTIL: {until_str}")
-            
             # Parse UNTIL date if present
             until_date = None
             if until_str:
                 until_date = self.robust_date_parse(until_str)
-                app.logger.info(f"Parsed UNTIL date: {until_date}")
             
             # Calculate event duration
             duration = base_event['end'] - base_event['start']
@@ -419,8 +452,6 @@ class CalDAVClient:
             expanded_start = start_date - timedelta(days=60)
             expanded_end = end_date + timedelta(days=60)
             
-            app.logger.info(f"Generating occurrences from {current_date} with duration {duration}")
-            
             while (occurrence_count < max_occurrences and 
                    current_date <= expanded_end and
                    (not until_date or current_date <= until_date)):
@@ -439,8 +470,6 @@ class CalDAVClient:
                     event_copy['original_uid'] = base_event['uid']
                     event_copy['recurrence_id'] = occurrence_count
                     events.append(event_copy)
-                    
-                    app.logger.debug(f"Added occurrence {occurrence_count}: {current_date} - {event_end}")
                 
                 occurrence_count += 1
                 
@@ -472,21 +501,16 @@ class CalDAVClient:
                         # Handle leap year issues (Feb 29)
                         current_date = current_date.replace(year=current_date.year + interval, day=28)
                 else:
-                    app.logger.error(f"Unknown frequency: {freq}")
                     break
                 
                 # Safety check to prevent infinite loops
                 if occurrence_count > 1000:
-                    app.logger.warning("Too many occurrences generated, stopping")
                     break
             
-            app.logger.info(f"Expanded recurring event '{base_event['summary']}' into {len(events)} occurrences")
             return events
             
         except Exception as e:
             app.logger.error(f"Error expanding recurring event: {e}")
-            import traceback
-            app.logger.error(traceback.format_exc())
             # Return the base event if we can't expand it
             return [base_event]
 
@@ -605,7 +629,6 @@ class CalDAVClient:
     def parse_rrule_string(self, rrule_string):
         """Parse RRULE string into dictionary format"""
         try:
-            app.logger.info(f"Parsing RRULE string: {rrule_string}")
             rrule_dict = {}
             parts = rrule_string.split(';')
             
@@ -621,19 +644,15 @@ class CalDAVClient:
                         try:
                             rrule_dict[key] = int(value)
                         except ValueError:
-                            app.logger.error(f"Invalid integer value for {key}: {value}")
                             continue
                     elif key == 'UNTIL':
                         # Parse UNTIL date
                         until_date = self.robust_date_parse(value)
                         if until_date:
                             rrule_dict[key] = until_date
-                        else:
-                            app.logger.error(f"Failed to parse UNTIL date: {value}")
                     else:
                         rrule_dict[key] = value
             
-            app.logger.info(f"Parsed RRULE dict: {rrule_dict}")
             return rrule_dict if rrule_dict else None
         except Exception as e:
             app.logger.error(f"Error parsing RRULE string: {e}")
@@ -675,7 +694,6 @@ class CalDAVClient:
                             if rrule_dict:
                                 recur = vRecur(rrule_dict)
                                 component['rrule'] = recur
-                                app.logger.info(f"Updated RRULE: {rrule_dict}")
                         except Exception as e:
                             app.logger.error(f"Error updating RRULE: {e}")
                     elif 'rrule' in component:
@@ -683,17 +701,14 @@ class CalDAVClient:
                     
                     break
             
-            # Generate and log the updated iCal data for debugging
+            # Generate the updated iCal data
             updated_ical = cal.to_ical()
-            app.logger.debug(f"Updated iCal data:\n{updated_ical.decode('utf-8')}")
             
             event.data = updated_ical
             event.save()
             return True
         except Exception as e:
             app.logger.error(f"Error updating event: {e}")
-            import traceback
-            app.logger.error(traceback.format_exc())
             return False
     
     def delete_event(self, event_url):
@@ -748,65 +763,6 @@ def debug_info():
         'request_path': request.path,
         'request_url': request.url
     })
-
-@app.route('/api/debug/events')
-def debug_events():
-    """Debug endpoint to see raw event data"""
-    if 'username' not in session:
-        return jsonify({'error': 'Not authenticated'}), 401
-    
-    try:
-        client = CalDAVClient(session['username'], session['password'], 
-                             session['caldav_url'], session.get('server_type', 'generic'))
-        
-        if not client.connect():
-            return jsonify({'error': 'CalDAV connection failed'}), 500
-        
-        # Get first selected calendar
-        prefs = get_user_preferences()
-        selected_calendars = prefs.get('selected_calendars', [])
-        if not selected_calendars:
-            return jsonify({'error': 'No calendars selected'}), 400
-        
-        if not client.select_calendar(selected_calendars[0]):
-            return jsonify({'error': 'Could not select calendar'}), 500
-        
-        # Get raw calendar objects
-        all_objects = list(client.calendar.objects())
-        debug_info = []
-        
-        for i, obj in enumerate(all_objects[:5]):  # Limit to first 5 for debugging
-            try:
-                raw_data = None
-                if hasattr(obj, 'data') and obj.data is not None:
-                    raw_data = obj.data
-                elif hasattr(obj, 'get_data'):
-                    raw_data = obj.get_data()
-                
-                if raw_data:
-                    if isinstance(raw_data, bytes):
-                        raw_data = raw_data.decode('utf-8', errors='ignore')
-                    
-                    debug_info.append({
-                        'index': i,
-                        'url': str(getattr(obj, 'url', 'unknown')),
-                        'has_rrule': 'RRULE:' in raw_data,
-                        'raw_data': raw_data[:1000] + '...' if len(raw_data) > 1000 else raw_data
-                    })
-            except Exception as e:
-                debug_info.append({
-                    'index': i,
-                    'error': str(e)
-                })
-        
-        return jsonify({
-            'calendar': selected_calendars[0],
-            'total_objects': len(all_objects),
-            'sample_objects': debug_info
-        })
-        
-    except Exception as e:
-        return jsonify({'error': f'Debug failed: {e}'}), 500
 
 @app.route('/')
 def index():
@@ -981,13 +937,10 @@ def api_create_event():
     if not data:
         return jsonify({'error': 'No data provided'}), 400
     
-    app.logger.info(f"Creating event with data: {data}")
-    
     try:
         start_dt = datetime.fromisoformat(data['start'].replace('Z', '+00:00'))
         end_dt = datetime.fromisoformat(data['end'].replace('Z', '+00:00'))
     except (ValueError, KeyError) as e:
-        app.logger.error(f"Invalid date format: {e}")
         return jsonify({'error': 'Invalid date format'}), 400
     
     # Determine target calendar
@@ -1010,8 +963,6 @@ def api_create_event():
             else:
                 target_calendar = selected_calendars[0]
     
-    app.logger.info(f"Target calendar: {target_calendar}")
-    
     # Check CalDAV connection info
     if not all(key in session for key in ['username', 'password', 'caldav_url']):
         return jsonify({'error': 'Session incomplete - please log in again'}), 401
@@ -1021,11 +972,9 @@ def api_create_event():
                          session['caldav_url'], session.get('server_type', 'generic'))
     
     if not client.connect():
-        app.logger.error("CalDAV connection failed")
         return jsonify({'error': 'CalDAV connection failed'}), 500
     
     if not client.select_calendar(target_calendar):
-        app.logger.error(f"Calendar not found: {target_calendar}")
         return jsonify({'error': f'Calendar "{target_calendar}" not found'}), 500
     
     # Build RRULE string if recurrence is specified
@@ -1047,7 +996,6 @@ def api_create_event():
                 app.logger.error(f"Error parsing recurring_until date: {e}")
         
         rrule = ';'.join(rrule_parts)
-        app.logger.info(f"Generated RRULE for new event: {rrule}")
     
     # Create the event
     success = client.create_event(
@@ -1060,10 +1008,8 @@ def api_create_event():
     )
     
     if success:
-        app.logger.info("Event created successfully")
         return jsonify({'success': True})
     else:
-        app.logger.error("Failed to create event")
         return jsonify({'error': 'Failed to create event'}), 500
 
 @app.route('/api/settings', methods=['GET'])
