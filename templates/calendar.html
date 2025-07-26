@@ -385,7 +385,13 @@ document.addEventListener('DOMContentLoaded', function() {
                                 cleanEvent.extendedProps.caldavUrl = cleanEvent.url;
                                 cleanEvent.extendedProps.location = cleanEvent.location || '';
                                 cleanEvent.extendedProps.is_recurring = cleanEvent.is_recurring || false;
+                                cleanEvent.extendedProps.original_uid = cleanEvent.original_uid || cleanEvent.id;
+                                cleanEvent.extendedProps.calendar_name = cleanEvent.calendar_name;
                                 delete cleanEvent.url;
+                                delete cleanEvent.location;
+                                delete cleanEvent.is_recurring;
+                                delete cleanEvent.original_uid;
+                                delete cleanEvent.calendar_name;
                             }
                             
                             const startDate = new Date(cleanEvent.start);
@@ -415,6 +421,14 @@ document.addEventListener('DOMContentLoaded', function() {
                             }
                             
                             return cleanEvent;
+                        });
+                        successCallback(cleanEvents);
+                    }
+                })
+                .catch(error => {
+                    failureCallback(error);
+                });
+        },
                         });
                         successCallback(cleanEvents);
                     }
