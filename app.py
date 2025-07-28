@@ -1433,9 +1433,12 @@ def api_update_event(event_id):
         app.logger.error("Failed to update event")
         return jsonify({'error': 'Failed to update event'}), 500
 
-    @app.route('/api/events/<event_id>', methods=['DELETE'])
+    @app.route('/api/events/<path:event_id>', methods=['DELETE'])
     def api_delete_event(event_id):
         """API endpoint to delete event with extensive debugging"""
+        # URL decode the event_id
+        from urllib.parse import unquote
+        event_id = unquote(event_id)
         print(f"DEBUG: Delete request received for event_id: {event_id}")
         
         if 'username' not in session:
@@ -1572,6 +1575,67 @@ def api_update_event(event_id):
             print(f"DEBUG: Full traceback: {traceback.format_exc()}")
             return jsonify({'error': error_message}), 500
 
+    # Also add debugging to the basic delete_event method
+    def delete_event(self, event_url):
+        """Delete an event with debugging"""
+        try:
+            print(f"DEBUG: delete_event called with URL: {event_url}")
+            
+            if not self.calendar:
+                print("DEBUG: No calendar selected")
+                return False
+            
+            print(f"DEBUG: Attempting to find event by URL")
+            
+            # Try to get the event object
+            try:
+                event = self.calendar.event_by_url(event_url)
+                print(f"DEBUG: Found event object: {event}")
+            except Exception as e:
+                print(f"DEBUG: Error finding event by URL: {e}")
+                # Try alternative approach - find by searching all events
+                print("DEBUG: Trying alternative approach to find event")
+                
+                try:
+                    all_objects = list(self.calendar.objects())
+                    print(f"DEBUG: Found {len(all_objects)} total objects in calendar")
+                    
+                    for i, obj in enumerate(all_objects):
+                        try:
+                            obj_url = getattr(obj, 'url', None) or getattr(obj, 'canonical_url', None)
+                            if obj_url and str(obj_url) == event_url:
+                                print(f"DEBUG: Found matching event at index {i}")
+                                event = obj
+                                break
+                        except Exception as obj_e:
+                            print(f"DEBUG: Error checking object {i}: {obj_e}")
+                            continue
+                    else:
+                        print(f"DEBUG: No event found with URL: {event_url}")
+                        return False
+                        
+                except Exception as search_e:
+                    print(f"DEBUG: Error searching for event: {search_e}")
+                    return False
+            
+            # Try to delete the event
+            try:
+                print(f"DEBUG: Attempting to delete event")
+                event.delete()
+                print(f"DEBUG: Event deleted successfully")
+                return True
+            except Exception as delete_e:
+                print(f"DEBUG: Error deleting event: {delete_e}")
+                import traceback
+                print(f"DEBUG: Delete traceback: {traceback.format_exc()}")
+                return False
+                
+        except Exception as e:
+            print(f"DEBUG: Error in delete_event: {e}")
+            import traceback
+            print(f"DEBUG: Full traceback: {traceback.format_exc()}")
+            return False
+            
 @app.route('/logout')
 def logout():
     """Logout and clear session"""
