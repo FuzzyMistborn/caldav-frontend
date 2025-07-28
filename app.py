@@ -379,6 +379,204 @@ class CalDAVClient:
             app.logger.error(f"Error in safe_parse_event: {e}")
             return []
 
+    def create_event(self, summary, description, location, start_dt, end_dt, rrule=None):
+        """Create a new event with optional recurrence and location"""
+        if not self.calendar:
+            print("DEBUG: No calendar selected for event creation")
+            return False
+        
+        try:
+            print(f"DEBUG: Creating event: {summary}")
+            print(f"DEBUG: Start: {start_dt}, End: {end_dt}")
+            print(f"DEBUG: Location: {location}")
+            print(f"DEBUG: RRULE: {rrule}")
+            
+            # Ensure timezone-naive datetimes for CalDAV compatibility
+            if hasattr(start_dt, 'tzinfo') and start_dt.tzinfo:
+                start_dt = start_dt.replace(tzinfo=None)
+            if hasattr(end_dt, 'tzinfo') and end_dt.tzinfo:
+                end_dt = end_dt.replace(tzinfo=None)
+            
+            cal = Calendar()
+            cal.add('prodid', '-//CalDAV Web Client//Enhanced//')
+            cal.add('version', '2.0')
+            
+            event = ICalEvent()
+            event.add('summary', summary)
+            event.add('description', description)
+            if location:
+                event.add('location', location)
+            event.add('dtstart', start_dt)
+            event.add('dtend', end_dt)
+            event.add('dtstamp', datetime.now(pytz.UTC).replace(tzinfo=None))
+            event.add('uid', str(uuid.uuid4()))
+            
+            # Add recurrence rule if provided
+            if rrule:
+                try:
+                    print(f"DEBUG: Adding RRULE to event: {rrule}")
+                    # Parse and add RRULE
+                    rrule_dict = self.parse_rrule_string(rrule)
+                    if rrule_dict:
+                        recur = vRecur(rrule_dict)
+                        event.add('rrule', recur)
+                        print(f"DEBUG: Successfully added RRULE: {rrule_dict}")
+                    else:
+                        print(f"DEBUG: Failed to parse RRULE: {rrule}")
+                except Exception as e:
+                    print(f"DEBUG: Error adding RRULE: {e}")
+                    import traceback
+                    print(f"DEBUG: RRULE traceback: {traceback.format_exc()}")
+            
+            cal.add_component(event)
+            
+            ical_data = cal.to_ical()
+            print(f"DEBUG: Generated iCal data length: {len(ical_data)} bytes")
+            
+            try:
+                self.calendar.save_event(ical_data)
+                print("DEBUG: Event saved successfully to calendar")
+                return True
+            except Exception as save_error:
+                print(f"DEBUG: Error saving event to calendar: {save_error}")
+                import traceback
+                print(f"DEBUG: Save traceback: {traceback.format_exc()}")
+                return False
+                
+        except Exception as e:
+            print(f"DEBUG: Error creating event: {e}")
+            import traceback
+            print(f"DEBUG: Create traceback: {traceback.format_exc()}")
+            return False
+
+    def parse_rrule_string(self, rrule_string):
+        """Parse RRULE string into dictionary format"""
+        try:
+            print(f"DEBUG: Parsing RRULE string: {rrule_string}")
+            rrule_dict = {}
+            parts = rrule_string.split(';')
+            
+            for part in parts:
+                if '=' in part:
+                    key, value = part.split('=', 1)
+                    key = key.upper().strip()
+                    value = value.strip()
+                    
+                    if key == 'FREQ':
+                        rrule_dict[key] = value.upper()
+                    elif key in ['INTERVAL', 'COUNT']:
+                        try:
+                            rrule_dict[key] = int(value)
+                        except ValueError:
+                            print(f"DEBUG: Invalid integer value for {key}: {value}")
+                            continue
+                    elif key == 'UNTIL':
+                        # Parse UNTIL date
+                        until_date = self.robust_date_parse(value)
+                        if until_date:
+                            rrule_dict[key] = until_date
+                        else:
+                            print(f"DEBUG: Failed to parse UNTIL date: {value}")
+                    else:
+                        rrule_dict[key] = value
+            
+            print(f"DEBUG: Parsed RRULE dict: {rrule_dict}")
+            return rrule_dict if rrule_dict else None
+        except Exception as e:
+            print(f"DEBUG: Error parsing RRULE string: {e}")
+            return None
+
+    def update_event(self, event_url, summary, description, location, start_dt, end_dt, rrule=None):
+        """Update an existing event"""
+        try:
+            print(f"DEBUG: Updating event at URL: {event_url}")
+            print(f"DEBUG: New summary: {summary}")
+            print(f"DEBUG: New RRULE: {rrule}")
+            
+            # Find the event first
+            try:
+                event = self.calendar.event_by_url(event_url)
+                print(f"DEBUG: Found event to update: {event}")
+            except Exception as e:
+                print(f"DEBUG: Error finding event by URL: {e}")
+                return False
+            
+            # Get the current event data
+            try:
+                cal = Calendar.from_ical(event.data)
+            except Exception as e:
+                print(f"DEBUG: Error parsing current event data: {e}")
+                return False
+            
+            # Find and update the VEVENT component
+            event_updated = False
+            for component in cal.walk():
+                if component.name == "VEVENT":
+                    print("DEBUG: Found VEVENT component to update")
+                    
+                    # Update basic properties
+                    component['summary'] = summary
+                    component['description'] = description
+                    
+                    # Handle location
+                    if location:
+                        component['location'] = location
+                    elif 'location' in component:
+                        del component['location']
+                    
+                    # Ensure timezone-naive datetimes for CalDAV compatibility
+                    if hasattr(start_dt, 'tzinfo') and start_dt.tzinfo:
+                        start_dt = start_dt.replace(tzinfo=None)
+                    if hasattr(end_dt, 'tzinfo') and end_dt.tzinfo:
+                        end_dt = end_dt.replace(tzinfo=None)
+                    
+                    # Update dates
+                    component['dtstart'] = start_dt
+                    component['dtend'] = end_dt
+                    component['dtstamp'] = datetime.now(pytz.UTC).replace(tzinfo=None)
+                    
+                    # Handle recurrence rule
+                    if rrule:
+                        try:
+                            rrule_dict = self.parse_rrule_string(rrule)
+                            if rrule_dict:
+                                recur = vRecur(rrule_dict)
+                                component['rrule'] = recur
+                                print("DEBUG: Updated RRULE in component")
+                        except Exception as e:
+                            print(f"DEBUG: Error updating RRULE: {e}")
+                    elif 'rrule' in component:
+                        del component['rrule']
+                        print("DEBUG: Removed RRULE from component")
+                    
+                    event_updated = True
+                    break
+            
+            if not event_updated:
+                print("DEBUG: No VEVENT component found to update")
+                return False
+            
+            # Generate the updated iCal data
+            try:
+                updated_ical = cal.to_ical()
+                print(f"DEBUG: Generated updated iCal data length: {len(updated_ical)} bytes")
+                
+                event.data = updated_ical
+                event.save()
+                print("DEBUG: Event updated successfully")
+                return True
+            except Exception as e:
+                print(f"DEBUG: Error saving updated event: {e}")
+                import traceback
+                print(f"DEBUG: Update save traceback: {traceback.format_exc()}")
+                return False
+                
+        except Exception as e:
+            print(f"DEBUG: Error updating event: {e}")
+            import traceback
+            print(f"DEBUG: Update traceback: {traceback.format_exc()}")
+            return False
+
     def parse_ical_component(self, component, event_url):
         """Parse an iCalendar component into event data"""
         try:
@@ -1028,6 +1226,234 @@ def api_delete_event(event_id):
         import traceback
         print(f"DEBUG: Full traceback: {traceback.format_exc()}")
         return jsonify({'error': error_message}), 500
+
+    @app.route('/api/events', methods=['POST'])
+    def api_create_event():
+        """API endpoint to create event"""
+        print("DEBUG: Create event request received")
+        
+        if 'username' not in session:
+            print("DEBUG: User not authenticated for create")
+            return jsonify({'error': 'Not authenticated'}), 401
+        
+        data = request.get_json()
+        if not data:
+            print("DEBUG: No data provided for create")
+            return jsonify({'error': 'No data provided'}), 400
+        
+        print(f"DEBUG: Create event data: {data}")
+        
+        try:
+            start_dt = datetime.fromisoformat(data['start'].replace('Z', '+00:00'))
+            end_dt = datetime.fromisoformat(data['end'].replace('Z', '+00:00'))
+            print(f"DEBUG: Parsed dates - Start: {start_dt}, End: {end_dt}")
+        except (ValueError, KeyError) as e:
+            print(f"DEBUG: Invalid date format: {e}")
+            return jsonify({'error': 'Invalid date format'}), 400
+        
+        # Determine target calendar
+        prefs = get_user_preferences()
+        target_calendar = data.get('calendar_name')
+        if not target_calendar:
+            # First try user's default calendar
+            if prefs.get('default_calendar'):
+                target_calendar = prefs['default_calendar']
+            else:
+                # Fall back to first selected calendar
+                selected_calendars = prefs.get('selected_calendars', [])
+                if not selected_calendars:
+                    # If no selected calendars, try to get first available calendar
+                    available_calendars = prefs.get('available_calendars', [])
+                    if available_calendars:
+                        target_calendar = available_calendars[0][0]
+                    else:
+                        print("DEBUG: No calendars available for create")
+                        return jsonify({'error': 'No calendars available'}), 400
+                else:
+                    target_calendar = selected_calendars[0]
+        
+        print(f"DEBUG: Target calendar: {target_calendar}")
+        
+        # Check CalDAV connection info
+        if not all(key in session for key in ['username', 'password', 'caldav_url']):
+            print("DEBUG: Session incomplete for create")
+            return jsonify({'error': 'Session incomplete - please log in again'}), 401
+        
+        # Create CalDAV client
+        try:
+            client = CalDAVClient(session['username'], session['password'], 
+                                session['caldav_url'], session.get('server_type', 'generic'))
+            print("DEBUG: CalDAV client created for create")
+        except Exception as e:
+            print(f"DEBUG: Error creating CalDAV client for create: {e}")
+            return jsonify({'error': f'CalDAV client error: {str(e)}'}), 500
+        
+        try:
+            if not client.connect():
+                print("DEBUG: CalDAV connection failed for create")
+                return jsonify({'error': 'CalDAV connection failed'}), 500
+            print("DEBUG: CalDAV connected for create")
+        except Exception as e:
+            print(f"DEBUG: CalDAV connection exception for create: {e}")
+            return jsonify({'error': f'CalDAV connection error: {str(e)}'}), 500
+        
+        try:
+            if not client.select_calendar(target_calendar):
+                print(f"DEBUG: Calendar selection failed for create: {target_calendar}")
+                return jsonify({'error': f'Calendar "{target_calendar}" not found'}), 500
+            print(f"DEBUG: Calendar selected for create: {target_calendar}")
+        except Exception as e:
+            print(f"DEBUG: Calendar selection exception for create: {e}")
+            return jsonify({'error': f'Calendar selection error: {str(e)}'}), 500
+        
+        # Build RRULE string if recurrence is specified
+        rrule = None
+        if data.get('recurring') and data.get('recurring') != 'none':
+            rrule_parts = [f"FREQ={data['recurring'].upper()}"]
+            
+            if data.get('recurring_interval') and int(data.get('recurring_interval', 1)) > 1:
+                rrule_parts.append(f"INTERVAL={data['recurring_interval']}")
+            
+            if data.get('recurring_count'):
+                rrule_parts.append(f"COUNT={data['recurring_count']}")
+            elif data.get('recurring_until'):
+                # Convert until date to proper format
+                try:
+                    until_date = datetime.fromisoformat(data['recurring_until'] + 'T23:59:59')
+                    rrule_parts.append(f"UNTIL={until_date.strftime('%Y%m%dT%H%M%SZ')}")
+                except Exception as e:
+                    print(f"DEBUG: Error parsing recurring_until date: {e}")
+            
+            rrule = ';'.join(rrule_parts)
+            print(f"DEBUG: Built RRULE: {rrule}")
+        
+        # Create the event
+        try:
+            success = client.create_event(
+                data.get('title', ''),
+                data.get('description', ''),
+                data.get('location', ''),
+                start_dt,
+                end_dt,
+                rrule
+            )
+            
+            if success:
+                print("DEBUG: Event created successfully")
+                return jsonify({'success': True})
+            else:
+                print("DEBUG: Failed to create event")
+                return jsonify({'error': 'Failed to create event'}), 500
+                
+        except Exception as e:
+            print(f"DEBUG: Exception during event creation: {e}")
+            import traceback
+            print(f"DEBUG: Create exception traceback: {traceback.format_exc()}")
+            return jsonify({'error': f'Error creating event: {str(e)}'}), 500
+
+    @app.route('/api/events/<path:event_id>', methods=['PUT'])
+    def api_update_event(event_id):
+        """API endpoint to update event"""
+        event_id = unquote(event_id)
+        print(f"DEBUG: Update event request for: {event_id}")
+        
+        if 'username' not in session:
+            print("DEBUG: User not authenticated for update")
+            return jsonify({'error': 'Not authenticated'}), 401
+        
+        data = request.get_json()
+        if not data:
+            print("DEBUG: No data provided for update")
+            return jsonify({'error': 'No data provided'}), 400
+        
+        print(f"DEBUG: Update event data: {data}")
+        
+        try:
+            start_dt = datetime.fromisoformat(data['start'].replace('Z', '+00:00'))
+            end_dt = datetime.fromisoformat(data['end'].replace('Z', '+00:00'))
+        except (ValueError, KeyError) as e:
+            print(f"DEBUG: Invalid date format for update: {e}")
+            return jsonify({'error': 'Invalid date format'}), 400
+        
+        # Extract calendar name from event ID
+        if ':' in event_id:
+            calendar_name, uid = event_id.split(':', 1)
+        else:
+            prefs = get_user_preferences()
+            selected_calendars = prefs.get('selected_calendars', [])
+            calendar_name = selected_calendars[0] if selected_calendars else None
+            uid = event_id
+        
+        if not calendar_name:
+            print("DEBUG: Cannot determine target calendar for update")
+            return jsonify({'error': 'Cannot determine target calendar'}), 400
+        
+        # Check for event URL in data
+        event_url = data.get('url')
+        if not event_url:
+            print("DEBUG: Event URL required for update")
+            return jsonify({'error': 'Event URL required for updates'}), 400
+        
+        # Check CalDAV connection info
+        if not all(key in session for key in ['username', 'password', 'caldav_url']):
+            print("DEBUG: Session incomplete for update")
+            return jsonify({'error': 'Session incomplete - please log in again'}), 401
+        
+        try:
+            client = CalDAVClient(session['username'], session['password'], 
+                                session['caldav_url'], session.get('server_type', 'generic'))
+            
+            if not client.connect():
+                print("DEBUG: CalDAV connection failed for update")
+                return jsonify({'error': 'CalDAV connection failed'}), 500
+            
+            if not client.select_calendar(calendar_name):
+                print(f"DEBUG: Calendar not found for update: {calendar_name}")
+                return jsonify({'error': f'Calendar "{calendar_name}" not found'}), 500
+            
+            # Build RRULE string if recurrence is specified
+            rrule = None
+            if data.get('recurring') and data.get('recurring') != 'none':
+                rrule_parts = [f"FREQ={data['recurring'].upper()}"]
+                
+                if data.get('recurring_interval') and int(data.get('recurring_interval', 1)) > 1:
+                    rrule_parts.append(f"INTERVAL={data['recurring_interval']}")
+                
+                if data.get('recurring_count'):
+                    rrule_parts.append(f"COUNT={data['recurring_count']}")
+                elif data.get('recurring_until'):
+                    try:
+                        until_date = datetime.fromisoformat(data['recurring_until'] + 'T23:59:59')
+                        rrule_parts.append(f"UNTIL={until_date.strftime('%Y%m%dT%H%M%SZ')}")
+                    except Exception as e:
+                        print(f"DEBUG: Error parsing recurring_until date for update: {e}")
+                
+                rrule = ';'.join(rrule_parts)
+                print(f"DEBUG: Generated RRULE for update: {rrule}")
+            
+            # Update the event
+            success = client.update_event(
+                event_url,
+                data.get('title', ''),
+                data.get('description', ''),
+                data.get('location', ''),
+                start_dt,
+                end_dt,
+                rrule
+            )
+            
+            if success:
+                print("DEBUG: Event updated successfully")
+                return jsonify({'success': True})
+            else:
+                print("DEBUG: Failed to update event")
+                return jsonify({'error': 'Failed to update event'}), 500
+                
+        except Exception as e:
+            print(f"DEBUG: Exception during event update: {e}")
+            import traceback
+            print(f"DEBUG: Update exception traceback: {traceback.format_exc()}")
+            return jsonify({'error': f'Error updating event: {str(e)}'}), 500
 
 @app.route('/logout')
 def logout():
