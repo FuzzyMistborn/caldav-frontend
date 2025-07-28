@@ -18,18 +18,7 @@ from dotenv import load_dotenv
 import sys
 import logging
 
-# Configure logging to show debug messages
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.StreamHandler(sys.stderr)
-    ]
-)
 
-# Also ensure Flask debug mode is on
-app.debug = True
 
 # Load environment variables
 load_dotenv()
@@ -54,6 +43,19 @@ CALDAV_URL_PATTERNS = {
     'radicale': '{base_url}/{username}/',
     'generic': '{base_url}/calendars/{username}/'
 }
+
+# Configure logging to show debug messages
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.StreamHandler(sys.stderr)
+    ]
+)
+
+# Also ensure Flask debug mode is on
+app.debug = True
 
 class CalDAVClient:
     def __init__(self, username, password, base_url, server_type='generic'):
