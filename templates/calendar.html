@@ -41,11 +41,7 @@
                 </div>
                 
                 <!-- Main Calendar -->
-                <div id="calendar" style="position: relative;">
-                    <div class="calendar-selection-hint" id="selectionHint">
-                        💡 Drag to select date/time ranges for events
-                    </div>
-                </div>
+                <div id="calendar"></div>
             </div>
         </div>
     </div>
@@ -61,9 +57,9 @@
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body settings-modal-body">
+            <div class="modal-body">
                 <!-- Week Start Setting -->
-                <div class="week-start-setting">
+                <div class="mb-3">
                     <label for="weekStart" class="form-label">
                         <i class="fas fa-calendar-week me-2"></i>Week Starts On
                     </label>
@@ -71,54 +67,37 @@
                         <option value="0">Sunday</option>
                         <option value="1">Monday</option>
                     </select>
-                    <small class="form-text mt-1 d-block">Choose which day your week starts on</small>
                 </div>
 
                 <!-- Default Calendar Setting -->
-                <div class="week-start-setting">
+                <div class="mb-3">
                     <label for="defaultCalendar" class="form-label">
                         <i class="fas fa-calendar-plus me-2"></i>Default Calendar
                     </label>
                     <select class="form-select" id="defaultCalendar">
                         <option value="">Select default calendar...</option>
                     </select>
-                    <small class="form-text mt-1 d-block">Calendar to use by default when creating new events</small>
                 </div>
                 
                 <!-- Calendar Colors Section -->
                 <div class="mb-3">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <label class="form-label mb-0">
-                            <i class="fas fa-palette me-2"></i>Calendar Colors
-                        </label>
-                        <div class="btn-group btn-group-sm bulk-actions">
-                            <button type="button" class="btn btn-outline-secondary" onclick="resetAllColors()">
-                                <i class="fas fa-undo me-1"></i>Reset All
-                            </button>
-                            <button type="button" class="btn btn-outline-primary" onclick="randomizeColors()">
-                                <i class="fas fa-random me-1"></i>Randomize
-                            </button>
-                        </div>
-                    </div>
-                    <small class="text-muted mb-2 d-block">Customize the color for each calendar</small>
-                    <div id="colorSettings" class="color-settings-grid">
+                    <label class="form-label">
+                        <i class="fas fa-palette me-2"></i>Calendar Colors
+                    </label>
+                    <div id="colorSettings">
                         <!-- Color settings will be populated by JavaScript -->
                     </div>
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <i class="fas fa-times me-1"></i>Cancel
-                </button>
-                <button type="button" class="btn btn-primary" id="saveSettingsBtn">
-                    <i class="fas fa-save me-1"></i>Save Settings
-                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveSettingsBtn">Save Settings</button>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Enhanced Event Modal with Location and Recurring -->
+<!-- Event Modal with Recurring Support -->
 <div class="modal fade" id="eventModal" tabindex="-1">
     <div class="modal-dialog modal-xl">
         <div class="modal-content">
@@ -143,12 +122,11 @@
                                 <label for="eventLocation" class="form-label">
                                     <i class="fas fa-map-marker-alt me-1"></i>Location
                                 </label>
-                                <input type="text" class="form-control" id="eventLocation" placeholder="Enter event location or address">
-                                <small class="form-text text-muted">Optional: Meeting room, address, or venue</small>
+                                <input type="text" class="form-control" id="eventLocation" placeholder="Enter event location">
                             </div>
                             <div class="mb-3">
                                 <label for="eventDescription" class="form-label">Description</label>
-                                <textarea class="form-control" id="eventDescription" rows="4" placeholder="Event details, agenda, notes..."></textarea>
+                                <textarea class="form-control" id="eventDescription" rows="4"></textarea>
                             </div>
                         </div>
                         
@@ -180,13 +158,13 @@
                             <div class="form-check mb-4">
                                 <input class="form-check-input" type="checkbox" id="allDayEvent">
                                 <label class="form-check-label" for="allDayEvent">
-                                    <i class="fas fa-clock me-1"></i>All Day Event
+                                    All Day Event
                                 </label>
                             </div>
                             
                             <!-- Recurring Section -->
                             <div class="card border-primary mb-3">
-                                <div class="card-header bg-light">
+                                <div class="card-header">
                                     <h6 class="mb-0">
                                         <i class="fas fa-redo-alt me-2"></i>Recurring Event Options
                                     </h6>
@@ -253,15 +231,9 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <i class="fas fa-times me-1"></i>Cancel
-                </button>
-                <button type="button" class="btn btn-danger" id="deleteEventBtn" style="display: none;">
-                    <i class="fas fa-trash me-1"></i>Delete
-                </button>
-                <button type="button" class="btn btn-primary" id="saveEventBtn">
-                    <i class="fas fa-save me-1"></i>Save Event
-                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="deleteEventBtn" style="display: none;">Delete</button>
+                <button type="button" class="btn btn-primary" id="saveEventBtn">Save Event</button>
             </div>
         </div>
     </div>
@@ -312,12 +284,8 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <i class="fas fa-times me-1"></i>Cancel
-                </button>
-                <button type="button" class="btn btn-danger" id="confirmRecurringDeleteBtn">
-                    <i class="fas fa-trash me-1"></i>Delete Event(s)
-                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmRecurringDeleteBtn">Delete Event(s)</button>
             </div>
         </div>
     </div>
@@ -333,11 +301,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const settingsModal = new bootstrap.Modal(document.getElementById('settingsModal'));
     const recurringDeleteModal = new bootstrap.Modal(document.getElementById('recurringDeleteModal'));
     
-    document.getElementById('eventModal').addEventListener('shown.bs.modal', function () {
-        document.getElementById('eventTitle').focus();
-        document.getElementById('eventTitle').select();
-    });
-
     let userSettings = { week_start: 0, calendar_colors: {} };
     
     const defaultCalendarColors = [
@@ -355,20 +318,8 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         selectable: true,
         selectMirror: true,
-        selectOverlap: true,
-        selectConstraint: null,
-        unselectAuto: true,
         height: '80vh',
         dayMaxEvents: true,
-        dayMaxEventRows: 3,
-        moreLinkClick: 'popover',
-        eventOrder: function(a, b) {
-            if (a.allDay && !b.allDay) return -1;
-            if (!a.allDay && b.allDay) return 1;
-            return a.start - b.start;
-        },
-        eventDisplay: 'auto',
-        displayEventTime: true,
         events: function(fetchInfo, successCallback, failureCallback) {
             fetch(`/api/events?start=${fetchInfo.startStr}&end=${fetchInfo.endStr}`)
                 .then(response => response.json())
@@ -392,28 +343,9 @@ document.addEventListener('DOMContentLoaded', function() {
                                 delete cleanEvent.calendar_name;
                             }
                             
-                            const startDate = new Date(cleanEvent.start);
-                            const endDate = new Date(cleanEvent.end);
-                            
-                            const isAllDay = (startDate.getHours() === 0 && startDate.getMinutes() === 0 && 
-                                            endDate.getHours() === 23 && endDate.getMinutes() === 59) ||
-                                           (startDate.getHours() === 0 && startDate.getMinutes() === 0 && 
-                                            endDate.getHours() === 0 && endDate.getMinutes() === 0);
-                            
-                            if (isAllDay) {
-                                cleanEvent.allDay = true;
-                                cleanEvent.classNames = ['all-day-event'];
-                                if (startDate.toDateString() !== endDate.toDateString()) {
-                                    cleanEvent.end = endDate.toISOString().split('T')[0];
-                                } else {
-                                    delete cleanEvent.end;
-                                }
-                            }
-                            
-                            // Add recurring indicator to title and class if it's a recurring event
+                            // Add recurring indicator to title if it's a recurring event
                             if (cleanEvent.extendedProps?.is_recurring) {
                                 cleanEvent.title = '🔄 ' + cleanEvent.title;
-                                cleanEvent.classNames = (cleanEvent.classNames || []).concat(['recurring-event']);
                             }
                             
                             return cleanEvent;
@@ -426,32 +358,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
         },
         dateClick: function(info) {
-            if (info.view.type === 'timeGridDay' || info.view.type === 'timeGridWeek') {
-                const clickTime = new Date(info.date);
-                const minutes = clickTime.getMinutes();
-                const roundedMinutes = Math.round(minutes / 30) * 30;
-                
-                const startTime = new Date(clickTime);
-                startTime.setMinutes(roundedMinutes, 0, 0);
-                
-                const endTime = new Date(startTime.getTime() + 30 * 60 * 1000);
-                
-                openEventModal(null, null, {
-                    startDate: info.dateStr.split('T')[0],
-                    endDate: info.dateStr.split('T')[0],
-                    startTime: startTime.toTimeString().slice(0, 5),
-                    endTime: endTime.toTimeString().slice(0, 5),
-                    isMultiDay: false,
-                    isTimed: true
-                });
-            } else {
-                openEventModal(null, null, {
-                    startDate: info.dateStr,
-                    endDate: info.dateStr,
-                    isMultiDay: false,
-                    isAllDay: true
-                });
-            }
+            openEventModal(null, null, {
+                startDate: info.dateStr,
+                endDate: info.dateStr,
+                isAllDay: true
+            });
         },
         eventClick: function(info) {
             info.jsEvent.preventDefault();
@@ -462,20 +373,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const endDate = new Date(info.end);
             
             if (info.view.type === 'timeGridDay' || info.view.type === 'timeGridWeek') {
-                const startMinutes = startDate.getMinutes();
-                const endMinutes = endDate.getMinutes();
-                
-                const roundedStartMinutes = Math.floor(startMinutes / 30) * 30;
-                startDate.setMinutes(roundedStartMinutes, 0, 0);
-                
-                const roundedEndMinutes = Math.ceil(endMinutes / 30) * 30;
-                if (roundedEndMinutes >= 60) {
-                    endDate.setHours(endDate.getHours() + 1);
-                    endDate.setMinutes(0, 0, 0);
-                } else {
-                    endDate.setMinutes(roundedEndMinutes, 0, 0);
-                }
-                
                 const startTime = startDate.toTimeString().slice(0, 5);
                 const endTime = endDate.toTimeString().slice(0, 5);
                 
@@ -484,51 +381,20 @@ document.addEventListener('DOMContentLoaded', function() {
                     endDate: endDate.toISOString().split('T')[0],
                     startTime: startTime,
                     endTime: endTime,
-                    isMultiDay: startDate.toDateString() !== endDate.toDateString(),
                     isTimed: true
                 });
             } else {
                 const actualEndDate = new Date(endDate);
                 actualEndDate.setDate(actualEndDate.getDate() - 1);
                 
-                const startDateStr = startDate.toISOString().split('T')[0];
-                const endDateStr = actualEndDate.toISOString().split('T')[0];
-                const isMultiDay = startDateStr !== endDateStr;
-                
                 openEventModal(null, null, {
-                    startDate: startDateStr,
-                    endDate: endDateStr,
-                    isMultiDay: isMultiDay,
+                    startDate: startDate.toISOString().split('T')[0],
+                    endDate: actualEndDate.toISOString().split('T')[0],
                     isAllDay: true
                 });
             }
             
-            const hint = document.getElementById('selectionHint');
-            if (hint) {
-                hint.classList.remove('show');
-            }
-            
             calendar.unselect();
-        },
-        selectAllow: function(selectInfo) {
-            const hint = document.getElementById('selectionHint');
-            if (hint && selectInfo.start.getTime() !== selectInfo.end.getTime()) {
-                hint.classList.add('show');
-            }
-            return true;
-        },
-        unselect: function(info) {
-            const hint = document.getElementById('selectionHint');
-            if (hint) {
-                hint.classList.remove('show');
-            }
-        },
-        eventDidMount: function(info) {
-            // Add location to event tooltip if available
-            const location = info.event.extendedProps?.location;
-            if (location) {
-                info.el.title = `${info.event.title}\n📍 ${location}`;
-            }
         }
     });
 
@@ -559,15 +425,10 @@ document.addEventListener('DOMContentLoaded', function() {
         calendarListEl.innerHTML = '<div class="text-info">Loading calendars...</div>';
         
         fetch('/api/calendar-selection')
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                return response.json();
-            })
+            .then(response => response.json())
             .then(data => {
                 if (data.error) {
-                    calendarListEl.innerHTML = `<div class="text-danger">API Error: ${data.error}</div>`;
+                    calendarListEl.innerHTML = `<div class="text-danger">Error: ${data.error}</div>`;
                     return;
                 }
                 
@@ -576,8 +437,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     updateCalendarSidebar(data.calendars, data.selected_calendars || []);
                     updateColorSettings(data.calendars);
                     updateEventCalendarSelector(data.calendars);
-                } else {
-                    calendarListEl.innerHTML = '<div class="text-warning">No calendars found in response</div>';
                 }
             })
             .catch(error => {
@@ -586,84 +445,48 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
 
-    function getCalendarColor(calName, index) {
-        return userSettings.calendar_colors[calName] || defaultCalendarColors[index % defaultCalendarColors.length];
-    }
-
     function updateCalendarSidebar(calendars, selectedCalendars) {
         let html = '';
         calendars.forEach((calInfo, index) => {
             const calName = Array.isArray(calInfo) ? calInfo[0] : calInfo;
-            const color = getCalendarColor(calName, index);
+            const color = userSettings.calendar_colors[calName] || defaultCalendarColors[index % defaultCalendarColors.length];
             const isSelected = selectedCalendars.includes(calName);
             
             html += `
                 <div class="form-check mb-2">
                     <input class="form-check-input calendar-toggle" type="checkbox" 
-                           value="${calName}" id="cal_${index}" ${isSelected ? 'checked' : ''}
-                           data-color="${color}">
+                           value="${calName}" id="cal_${index}" ${isSelected ? 'checked' : ''}>
                     <label class="form-check-label d-flex align-items-center" for="cal_${index}">
                         <span class="badge me-2" style="background-color: ${color}; width: 16px; height: 16px; border-radius: 50%;">&nbsp;</span>
                         <span class="flex-grow-1">${calName}</span>
-                        ${isSelected ? '<i class="fas fa-eye text-success ms-1"></i>' : '<i class="fas fa-eye-slash text-muted ms-1"></i>'}
                     </label>
                 </div>
             `;
         });
         
-        if (html === '') {
-            html = '<div class="text-warning">No calendars found</div>';
-        }
-        
         calendarListEl.innerHTML = html;
         
         document.querySelectorAll('.calendar-toggle').forEach(checkbox => {
-            checkbox.addEventListener('change', function() {
-                updateCalendarSelection();
-                updateSidebarButtonText();
-            });
+            checkbox.addEventListener('change', updateCalendarSelection);
         });
-        
-        updateSidebarButtonText();
-    }
-
-    function updateSidebarButtonText() {
-        const selectedCount = document.querySelectorAll('.calendar-toggle:checked').length;
-        const totalCount = document.querySelectorAll('.calendar-toggle').length;
-        const sidebarToggle = document.getElementById('sidebarToggle');
-        
-        if (sidebarToggle) {
-            sidebarToggle.innerHTML = `Calendars (${selectedCount}/${totalCount})`;
-        }
     }
 
     function updateColorSettings(calendars) {
         const colorSettingsEl = document.getElementById('colorSettings');
-        if (!colorSettingsEl) {
-            console.error('colorSettings element not found');
-            return;
-        }
-        
         let html = '';
         
         calendars.forEach((calInfo, index) => {
             const calName = Array.isArray(calInfo) ? calInfo[0] : calInfo;
-            const currentColor = getCalendarColor(calName, index);
+            const currentColor = userSettings.calendar_colors[calName] || defaultCalendarColors[index % defaultCalendarColors.length];
             
             html += `
-                <div class="color-setting-item">
-                    <div class="calendar-name-label" title="${calName}">${calName}</div>
-                    <div class="color-input-wrapper">
-                        <input type="color" class="form-control form-control-color color-picker" 
-                               value="${currentColor}" data-calendar="${calName}" 
-                               onchange="updateCalendarColor('${calName}', this.value)"
-                               title="Click to change color">
-                        <button type="button" class="btn btn-sm btn-outline-secondary reset-color-btn" 
-                                onclick="resetColor('${calName}', ${index})" 
-                                title="Reset ${calName} to default color">
-                            <i class="fas fa-undo"></i> Reset
-                        </button>
-                    </div>
+                <div class="mb-2 d-flex align-items-center">
+                    <label class="form-label mb-0 me-3" style="min-width: 150px;">${calName}</label>
+                    <input type="color" class="form-control form-control-color me-2" 
+                           value="${currentColor}" data-calendar="${calName}" 
+                           onchange="updateCalendarColor('${calName}', this.value)">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" 
+                            onclick="resetColor('${calName}', ${index})">Reset</button>
                 </div>
             `;
         });
@@ -671,42 +494,25 @@ document.addEventListener('DOMContentLoaded', function() {
         colorSettingsEl.innerHTML = html;
     }
 
-    function updateCalendarColorBadge(calName, color) {
-        const badges = document.querySelectorAll('.badge');
-        badges.forEach(badge => {
-            const checkbox = badge.closest('.form-check').querySelector('input');
-            if (checkbox && checkbox.value === calName) {
-                badge.style.backgroundColor = color;
-            }
-        });
-    }
-
     function updateEventCalendarSelector(calendars) {
         const selector = document.getElementById('eventCalendar');
         const defaultSelector = document.getElementById('defaultCalendar');
         
-        if (!selector || !defaultSelector) {
-            console.error('Calendar selectors not found in DOM');
-            return;
-        }
-        
         selector.innerHTML = '';
+        defaultSelector.innerHTML = '<option value="">Select default calendar...</option>';
+        
         calendars.forEach((calInfo) => {
             const calName = Array.isArray(calInfo) ? calInfo[0] : calInfo;
             
-            const option = document.createElement('option');
-            option.value = calName;
-            option.textContent = calName;
-            selector.appendChild(option);
-        });
-        
-        defaultSelector.innerHTML = '<option value="">Select default calendar...</option>';
-        calendars.forEach((calInfo) => {
-            const calName = Array.isArray(calInfo) ? calInfo[0] : calInfo;
-            const option = document.createElement('option');
-            option.value = calName;
-            option.textContent = calName;
-            defaultSelector.appendChild(option);
+            const option1 = document.createElement('option');
+            option1.value = calName;
+            option1.textContent = calName;
+            selector.appendChild(option1);
+            
+            const option2 = document.createElement('option');
+            option2.value = calName;
+            option2.textContent = calName;
+            defaultSelector.appendChild(option2);
         });
         
         if (userSettings.default_calendar) {
@@ -728,9 +534,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.success) {
                 calendar.refetchEvents();
             }
-        })
-        .catch(error => {
-            console.error('Error updating calendar selection:', error);
         });
     }
 
@@ -769,14 +572,12 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             document.getElementById('eventId').value = event.id || '';
-            document.getElementById('eventUrl').value = event.extendedProps?.caldavUrl || event.extendedProps?.url || '';
+            document.getElementById('eventUrl').value = event.extendedProps?.caldavUrl || '';
             
             const startDate = new Date(event.start);
             const endDate = new Date(event.end || event.start);
             
-            const isAllDay = event.allDay || 
-                            (startDate.getHours() === 0 && startDate.getMinutes() === 0 && 
-                             endDate.getHours() === 23 && endDate.getMinutes() === 59);
+            const isAllDay = event.allDay;
             
             document.getElementById('allDayEvent').checked = isAllDay;
             
@@ -784,10 +585,8 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('eventEndDate').value = endDate.toISOString().split('T')[0];
             
             if (!isAllDay) {
-                document.getElementById('eventStartTime').value = 
-                    startDate.toTimeString().slice(0, 5);
-                document.getElementById('eventEndTime').value = 
-                    endDate.toTimeString().slice(0, 5);
+                document.getElementById('eventStartTime').value = startDate.toTimeString().slice(0, 5);
+                document.getElementById('eventEndTime').value = endDate.toTimeString().slice(0, 5);
             }
             
             toggleTimeInputs(isAllDay);
@@ -804,61 +603,32 @@ document.addEventListener('DOMContentLoaded', function() {
                     document.getElementById('eventStartTime').value = dateRange.startTime;
                     document.getElementById('eventEndTime').value = dateRange.endTime;
                     toggleTimeInputs(false);
-                    
-                    if (dateRange.isMultiDay) {
-                        showToast(`Creating multi-day timed event from ${dateRange.startDate} ${dateRange.startTime} to ${dateRange.endDate} ${dateRange.endTime}`, 'info');
-                    }
                 } else {
-                    if (dateRange.isMultiDay) {
-                        document.getElementById('allDayEvent').checked = true;
-                        toggleTimeInputs(true);
-                        showToast(`Creating multi-day event from ${dateRange.startDate} to ${dateRange.endDate}`, 'info');
-                    } else {
-                        document.getElementById('allDayEvent').checked = false;
+                    document.getElementById('allDayEvent').checked = dateRange.isAllDay || false;
+                    if (!dateRange.isAllDay) {
                         document.getElementById('eventStartTime').value = '09:00';
                         document.getElementById('eventEndTime').value = '10:00';
-                        toggleTimeInputs(false);
                     }
+                    toggleTimeInputs(dateRange.isAllDay || false);
                 }
-            } else if (dateStr) {
-                document.getElementById('eventStartDate').value = dateStr;
-                document.getElementById('eventEndDate').value = dateStr;
-                document.getElementById('eventStartTime').value = '09:00';
-                document.getElementById('eventEndTime').value = '10:00';
-                document.getElementById('allDayEvent').checked = false;
-                toggleTimeInputs(false);
             }
             
             const calendarSelector = document.getElementById('eventCalendar');
-            const defaultCalendar = userSettings.default_calendar || 
-                                  document.getElementById('defaultCalendar').value;
+            const defaultCalendar = userSettings.default_calendar;
             if (defaultCalendar && calendarSelector) {
                 calendarSelector.value = defaultCalendar;
-            } else if (calendarSelector && calendarSelector.options.length > 0) {
-                calendarSelector.selectedIndex = 0;
             }
         }
         eventModal.show();
     }
 
     function toggleTimeInputs(isAllDay) {
-        const timeInputs = document.querySelectorAll('#eventStartTime, #eventEndTime');
         const timeGroups = document.querySelectorAll('#startTimeGroup, #endTimeGroup');
         
         if (isAllDay) {
-            timeGroups.forEach(group => {
-                group.style.display = 'none';
-            });
-            timeInputs.forEach(input => {
-                input.required = false;
-            });
+            timeGroups.forEach(group => group.style.display = 'none');
         } else {
-            timeGroups.forEach(group => {
-                group.style.display = 'block';
-            });
-            timeInputs.forEach(input => {
-                input.required = true;
-            });
+            timeGroups.forEach(group => group.style.display = 'block');
         }
     }
 
@@ -872,7 +642,6 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             recurringOptions.style.display = 'block';
             
-            // Update interval label
             const labels = {
                 'daily': 'day(s)',
                 'weekly': 'week(s)',
@@ -943,7 +712,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const requestData = { url: eventUrl };
         
-        // Add delete type and event date for recurring events
         if (deleteType !== 'single') {
             requestData.deleteType = deleteType;
             requestData.eventDate = document.getElementById('eventStartDate').value;
@@ -952,9 +720,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         fetch(`/api/events/${encodeURIComponent(eventId)}`, {
             method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestData)
         })
         .then(response => response.json())
@@ -993,26 +759,15 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         const toast = document.createElement('div');
-        toast.className = `alert alert-${type === 'error' ? 'danger' : type === 'success' ? 'success' : type === 'warning' ? 'warning' : 'info'} alert-dismissible fade show`;
-        toast.style.cssText = `
-            margin-bottom: 10px;
-            min-width: 300px;
-        `;
-        toast.innerHTML = `
-            ${message}
-            <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>
-        `;
+        toast.className = `alert alert-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'} alert-dismissible fade show`;
+        toast.style.cssText = `margin-bottom: 10px; min-width: 300px;`;
+        toast.innerHTML = `${message}<button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>`;
 
         toastContainer.appendChild(toast);
-
-        setTimeout(() => {
-            if (toast.parentElement) {
-                toast.remove();
-            }
-        }, 5000);
+        setTimeout(() => { if (toast.parentElement) toast.remove(); }, 5000);
     }
 
-    // Event handlers for recurring options
+    // Event handlers
     document.getElementById('recurring').addEventListener('change', updateRecurringOptions);
     document.getElementById('recurringInterval').addEventListener('input', updateRecurringPreview);
     
@@ -1032,12 +787,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const weekStart = parseInt(document.getElementById('weekStart').value);
         const defaultCalendar = document.getElementById('defaultCalendar').value;
         
-        // Disable button during save
-        const saveBtn = this;
-        const originalText = saveBtn.textContent;
-        saveBtn.disabled = true;
-        saveBtn.textContent = 'Saving...';
-        
         fetch('/api/settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1047,9 +796,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 calendar_colors: userSettings.calendar_colors
             })
         })
-        .then(response => {
-            return response.json();
-        })
+        .then(response => response.json())
         .then(data => {
             if (data.success) {
                 userSettings.default_calendar = defaultCalendar;
@@ -1059,17 +806,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 loadCalendarList();
                 showToast('Settings saved successfully!', 'success');
             } else {
-                showToast(`Error saving settings: ${data.error || 'Unknown error'}`, 'error');
+                showToast(`Error saving settings: ${data.error}`, 'error');
             }
         })
         .catch(error => {
-            console.error('Error saving settings:', error);
             showToast('Error saving settings. Please try again.', 'error');
-        })
-        .finally(() => {
-            // Re-enable button
-            saveBtn.disabled = false;
-            saveBtn.textContent = originalText;
         });
     });
 
@@ -1147,16 +888,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const method = isUpdate ? 'PUT' : 'POST';
         const url = isUpdate ? `/api/events/${encodeURIComponent(eventId)}` : '/api/events';
 
-        const saveBtn = document.getElementById('saveEventBtn');
-        const originalText = saveBtn.textContent;
-        saveBtn.disabled = true;
-        saveBtn.textContent = 'Saving...';
-
         fetch(url, {
             method: method,
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(eventData)
         })
         .then(response => response.json())
@@ -1170,12 +904,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         })
         .catch(error => {
-            console.error('Error saving event:', error);
             showToast('Error saving event. Please try again.', 'error');
-        })
-        .finally(() => {
-            saveBtn.disabled = false;
-            saveBtn.textContent = originalText;
         });
     });
 
@@ -1221,23 +950,6 @@ document.addEventListener('DOMContentLoaded', function() {
         toggleTimeInputs(this.checked);
     });
 
-    // Form submission handling
-    document.getElementById('eventForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        document.getElementById('saveEventBtn').click();
-    });
-
-    document.getElementById('eventForm').addEventListener('keydown', function(e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            if (e.target.tagName.toLowerCase() === 'textarea') {
-                return;
-            }
-            
-            e.preventDefault();
-            document.getElementById('saveEventBtn').click();
-        }
-    });
-    
     // Global functions
     window.refreshEvents = function() {
         calendar.refetchEvents();
@@ -1248,35 +960,28 @@ document.addEventListener('DOMContentLoaded', function() {
         delete userSettings.calendar_colors[calName];
         const colorPicker = document.querySelector(`input[data-calendar="${calName}"]`);
         if (colorPicker) colorPicker.value = defaultColor;
-        updateCalendarColorBadge(calName, defaultColor);
+        
+        // Update badge color in sidebar
+        const badges = document.querySelectorAll('.badge');
+        badges.forEach(badge => {
+            const checkbox = badge.closest('.form-check').querySelector('input');
+            if (checkbox && checkbox.value === calName) {
+                badge.style.backgroundColor = defaultColor;
+            }
+        });
     };
 
     window.updateCalendarColor = function(calName, color) {
         userSettings.calendar_colors[calName] = color;
-        updateCalendarColorBadge(calName, color);
-    };
-
-    window.resetAllColors = function() {
-        if (confirm('Reset all calendar colors to their defaults?')) {
-            userSettings.calendar_colors = {};
-            loadCalendarList();
-        }
-    };
-
-    window.randomizeColors = function() {
-        if (confirm('Assign random colors to all calendars?')) {
-            const availableColors = [
-                '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
-                '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
-                '#F8C471', '#82E0AA', '#F1948A', '#85CDFD', '#FABE58'
-            ];
-            
-            document.querySelectorAll('.color-picker').forEach((picker, index) => {
-                const randomColor = availableColors[index % availableColors.length];
-                picker.value = randomColor;
-                updateCalendarColor(picker.dataset.calendar, randomColor);
-            });
-        }
+        
+        // Update badge color in sidebar
+        const badges = document.querySelectorAll('.badge');
+        badges.forEach(badge => {
+            const checkbox = badge.closest('.form-check').querySelector('input');
+            if (checkbox && checkbox.value === calName) {
+                badge.style.backgroundColor = color;
+            }
+        });
     };
 });
 </script>
