@@ -2,7 +2,7 @@
 """
 CalDAV Web Client for Nextcloud
 A Flask-based web application for managing calendar events via CalDAV
-Clean version with proper recurring events support
+Complete version with recurring events and debug features
 """
 
 import os
@@ -68,6 +68,7 @@ class CalDAVClient:
                 password=self.password
             )
             self.principal = self.client.principal()
+            app.logger.info(f"Successfully connected to CalDAV server: {self.base_url}")
             return True
         except Exception as e:
             app.logger.error(f"CalDAV connection error: {e}")
@@ -88,6 +89,7 @@ class CalDAVClient:
                         display_name = 'Unnamed Calendar'
                 
                 calendar_list.append((display_name, str(cal.url)))
+                app.logger.info(f"Found calendar: {display_name} at {cal.url}")
             return calendar_list
         except Exception as e:
             app.logger.error(f"Error getting calendars: {e}")
@@ -108,10 +110,123 @@ class CalDAVClient:
                 
                 if display_name == calendar_name or cal.name == calendar_name:
                     self.calendar = cal
+                    app.logger.info(f"Selected calendar: {display_name}")
                     return True
+            app.logger.warning(f"Calendar not found: {calendar_name}")
             return False
         except Exception as e:
             app.logger.error(f"Error selecting calendar: {e}")
+            return False
+
+    def debug_calendar_contents(self):
+        """Debug method to inspect calendar contents"""
+        if not self.calendar:
+            app.logger.error("No calendar selected for debugging")
+            return
+        
+        try:
+            app.logger.info(f"=== DEBUGGING CALENDAR: {self.calendar.name} ===")
+            app.logger.info(f"Calendar URL: {self.calendar.url}")
+            
+            # Get all objects in the calendar
+            all_objects = list(self.calendar.objects())
+            app.logger.info(f"Total objects found: {len(all_objects)}")
+            
+            if len(all_objects) == 0:
+                app.logger.warning("No objects found in calendar - calendar might be empty")
+                return
+            
+            # Inspect each object
+            for i, obj in enumerate(all_objects):
+                try:
+                    app.logger.info(f"--- Object {i+1} ---")
+                    app.logger.info(f"Object type: {type(obj)}")
+                    app.logger.info(f"Object URL: {getattr(obj, 'url', 'No URL')}")
+                    
+                    # Try to get data
+                    raw_data = None
+                    if hasattr(obj, 'data') and obj.data is not None:
+                        raw_data = obj.data
+                    elif hasattr(obj, 'get_data'):
+                        try:
+                            raw_data = obj.get_data()
+                        except Exception as e:
+                            app.logger.warning(f"Failed to get_data(): {e}")
+                    
+                    if raw_data is None:
+                        app.logger.warning(f"Object {i+1}: No data available")
+                        continue
+                    
+                    # Convert to string
+                    if isinstance(raw_data, bytes):
+                        raw_data = raw_data.decode('utf-8', errors='ignore')
+                    
+                    app.logger.info(f"Object {i+1} data length: {len(raw_data)} characters")
+                    
+                    # Check if it's a calendar event
+                    if 'BEGIN:VEVENT' in raw_data:
+                        app.logger.info(f"Object {i+1}: Contains VEVENT")
+                        
+                        # Extract basic info
+                        lines = raw_data.split('\n')
+                        for line in lines:
+                            line = line.strip()
+                            if line.startswith('SUMMARY:'):
+                                app.logger.info(f"  Summary: {line[8:]}")
+                            elif line.startswith('DTSTART'):
+                                app.logger.info(f"  Start: {line}")
+                            elif line.startswith('DTEND'):
+                                app.logger.info(f"  End: {line}")
+                            elif line.startswith('UID:'):
+                                app.logger.info(f"  UID: {line[4:]}")
+                            elif line.startswith('RRULE:'):
+                                app.logger.info(f"  RRULE: {line[6:]}")
+                    else:
+                        app.logger.info(f"Object {i+1}: Not a VEVENT (data preview: {raw_data[:100]}...)")
+                        
+                except Exception as obj_error:
+                    app.logger.error(f"Error inspecting object {i+1}: {obj_error}")
+                    
+            app.logger.info("=== END CALENDAR DEBUG ===")
+            
+        except Exception as e:
+            app.logger.error(f"Error in debug_calendar_contents: {e}")
+
+    def create_test_recurring_event(self):
+        """Create a test recurring event for debugging"""
+        if not self.calendar:
+            app.logger.error("No calendar selected for test event creation")
+            return False
+        
+        try:
+            app.logger.info("Creating test recurring event...")
+            
+            # Create a simple weekly recurring event
+            now = datetime.now()
+            start_time = now.replace(hour=10, minute=0, second=0, microsecond=0)
+            end_time = start_time + timedelta(hours=1)
+            
+            # Simple weekly RRULE
+            rrule = "FREQ=WEEKLY;COUNT=5"
+            
+            success = self.create_event(
+                "Test Recurring Event",
+                "This is a test event created for debugging recurring functionality",
+                "Test Location",
+                start_time,
+                end_time,
+                rrule
+            )
+            
+            if success:
+                app.logger.info("Test recurring event created successfully")
+            else:
+                app.logger.error("Failed to create test recurring event")
+                
+            return success
+            
+        except Exception as e:
+            app.logger.error(f"Error creating test event: {e}")
             return False
 
     def create_event(self, summary, description, location, start_dt, end_dt, rrule=None):
@@ -121,6 +236,8 @@ class CalDAVClient:
             return False
         
         try:
+            app.logger.info(f"Creating event: {summary}")
+            
             # Ensure timezone-naive datetimes for CalDAV compatibility
             if hasattr(start_dt, 'tzinfo') and start_dt.tzinfo:
                 start_dt = start_dt.replace(tzinfo=None)
@@ -155,6 +272,8 @@ class CalDAVClient:
             cal.add_component(event)
             ical_data = cal.to_ical()
             
+            app.logger.info(f"Generated iCal data ({len(ical_data)} bytes)")
+            
             self.calendar.save_event(ical_data)
             app.logger.info("Event created successfully")
             return True
@@ -166,6 +285,8 @@ class CalDAVClient:
     def update_event(self, event_url, summary, description, location, start_dt, end_dt, rrule=None):
         """Update an existing event"""
         try:
+            app.logger.info(f"Updating event at URL: {event_url}")
+            
             # Find the event
             event = self.calendar.event_by_url(event_url)
             
@@ -234,6 +355,8 @@ class CalDAVClient:
     def delete_recurring_occurrence(self, event_url, original_uid, event_date):
         """Delete only a specific occurrence of a recurring event by adding EXDATE"""
         try:
+            app.logger.info(f"Deleting recurring occurrence: {original_uid} on {event_date}")
+            
             # Find the original recurring event
             original_event = self._find_event_by_uid(original_uid)
             if not original_event:
@@ -275,6 +398,7 @@ class CalDAVClient:
                     else:
                         component.add('exdate', exception_datetime)
                     
+                    app.logger.info(f"Added EXDATE: {exception_datetime}")
                     break
             
             # Save modified event
@@ -290,6 +414,8 @@ class CalDAVClient:
     def delete_recurring_future(self, event_url, original_uid, event_date):
         """Delete this occurrence and all future occurrences by modifying RRULE"""
         try:
+            app.logger.info(f"Deleting future recurring events: {original_uid} from {event_date}")
+            
             # Find the original recurring event
             original_event = self._find_event_by_uid(original_uid)
             if not original_event:
@@ -323,6 +449,7 @@ class CalDAVClient:
                         # Update the component
                         new_recur = vRecur(rrule_dict)
                         component['rrule'] = new_recur
+                        app.logger.info(f"Modified RRULE UNTIL: {until_date}")
                     else:
                         # No RRULE found, treat as single event deletion
                         return self.delete_event(event_url)
@@ -341,6 +468,8 @@ class CalDAVClient:
     def delete_recurring_series(self, original_uid):
         """Delete the entire recurring event series"""
         try:
+            app.logger.info(f"Deleting entire recurring series: {original_uid}")
+            
             # Find the original recurring event
             original_event = self._find_event_by_uid(original_uid)
             if not original_event:
@@ -364,6 +493,7 @@ class CalDAVClient:
             
             # Clean the UID (remove recurrence suffix if present)
             clean_uid = uid.split('_recurrence_')[0] if '_recurrence_' in uid else uid
+            app.logger.info(f"Searching for event with UID: {clean_uid}")
             
             all_objects = list(self.calendar.objects())
             
@@ -374,11 +504,13 @@ class CalDAVClient:
                         raw_data = raw_data.decode('utf-8', errors='ignore')
                     
                     if isinstance(raw_data, str) and f'UID:{clean_uid}' in raw_data:
+                        app.logger.info(f"Found event with UID: {clean_uid}")
                         return obj
                         
                 except Exception:
                     continue
             
+            app.logger.warning(f"Event not found with UID: {clean_uid}")
             return None
             
         except Exception as e:
@@ -388,10 +520,15 @@ class CalDAVClient:
     def get_events(self, start_date, end_date):
         """Get events from calendar with recurring event expansion"""
         if not self.calendar:
+            app.logger.warning("No calendar selected")
             return []
         
         try:
+            app.logger.info(f"Getting events from {start_date} to {end_date}")
+            
             all_objects = list(self.calendar.objects())
+            app.logger.info(f"Found {len(all_objects)} objects in calendar")
+            
             event_list = []
             
             for i, obj in enumerate(all_objects):
@@ -401,6 +538,7 @@ class CalDAVClient:
                         raw_data = raw_data.decode('utf-8', errors='ignore')
                     
                     if not isinstance(raw_data, str) or 'BEGIN:VEVENT' not in raw_data:
+                        app.logger.debug(f"Object {i+1}: Not a VEVENT")
                         continue
                     
                     obj_url = getattr(obj, 'url', f'/event/{i}')
@@ -416,9 +554,10 @@ class CalDAVClient:
                         if (event_start.date() <= end_date.date() and 
                             event_end.date() >= start_date.date()):
                             event_list.append(parsed_event)
+                            app.logger.debug(f"Added event: {parsed_event['summary']}")
                     
                 except Exception as obj_error:
-                    app.logger.error(f"Error processing object {i}: {obj_error}")
+                    app.logger.error(f"Error processing object {i+1}: {obj_error}")
                     continue
             
             app.logger.info(f"Returning {len(event_list)} events")
@@ -443,8 +582,10 @@ class CalDAVClient:
                         if event_data.get('rrule'):
                             expanded = self._expand_recurring_event(event_data, start_date, end_date)
                             events.extend(expanded)
+                            app.logger.debug(f"Expanded recurring event into {len(expanded)} occurrences")
                         else:
                             events.append(event_data)
+                            app.logger.debug(f"Added single event: {event_data['summary']}")
             
             return events
                     
@@ -713,6 +854,78 @@ def debug_info():
         'request_url': request.url
     })
 
+@app.route('/debug/interface')
+def debug_interface():
+    """Debug interface for testing CalDAV functionality"""
+    if 'username' not in session:
+        return redirect(url_for('login'))
+    return render_template('debug.html')
+
+@app.route('/debug/calendar', methods=['GET'])
+def debug_calendar():
+    """Debug endpoint to inspect calendar contents"""
+    if 'username' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    calendar_name = request.args.get('calendar')
+    if not calendar_name:
+        return jsonify({'error': 'Calendar name required'}), 400
+    
+    # Check session data
+    if not all(key in session for key in ['username', 'password', 'caldav_url']):
+        return jsonify({'error': 'Session incomplete'}), 401
+    
+    client = CalDAVClient(session['username'], session['password'], 
+                         session['caldav_url'], session.get('server_type', 'generic'))
+    
+    if not client.connect():
+        return jsonify({'error': 'CalDAV connection failed'}), 500
+    
+    if not client.select_calendar(calendar_name):
+        return jsonify({'error': f'Calendar "{calendar_name}" not found'}), 500
+    
+    # Run debug
+    client.debug_calendar_contents()
+    
+    return jsonify({'message': 'Debug info written to logs'})
+
+@app.route('/debug/create-test-event', methods=['POST'])
+def create_test_event():
+    """Create a test recurring event"""
+    if 'username' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    data = request.get_json() or {}
+    calendar_name = data.get('calendar_name')
+    
+    if not calendar_name:
+        prefs = get_user_preferences()
+        selected_calendars = prefs.get('selected_calendars', [])
+        if not selected_calendars:
+            return jsonify({'error': 'No calendars available'}), 400
+        calendar_name = selected_calendars[0]
+    
+    # Check session data
+    if not all(key in session for key in ['username', 'password', 'caldav_url']):
+        return jsonify({'error': 'Session incomplete'}), 401
+    
+    client = CalDAVClient(session['username'], session['password'], 
+                         session['caldav_url'], session.get('server_type', 'generic'))
+    
+    if not client.connect():
+        return jsonify({'error': 'CalDAV connection failed'}), 500
+    
+    if not client.select_calendar(calendar_name):
+        return jsonify({'error': f'Calendar "{calendar_name}" not found'}), 500
+    
+    # Create test event
+    success = client.create_test_recurring_event()
+    
+    if success:
+        return jsonify({'success': True, 'message': 'Test recurring event created'})
+    else:
+        return jsonify({'error': 'Failed to create test event'}), 500
+
 @app.route('/')
 def index():
     """Main calendar view"""
@@ -837,6 +1050,8 @@ def api_events():
             '#fd7e14', '#20c997', '#e83e8c', '#6c757d', '#17a2b8'
         ]
         
+        app.logger.info(f"Processing {len(selected_calendars)} selected calendars")
+        
         for i, calendar_name in enumerate(selected_calendars):
             if client.select_calendar(calendar_name):
                 events = client.get_events(start_dt, end_dt)
@@ -860,7 +1075,10 @@ def api_events():
                         'original_uid': event.get('original_uid', event['uid'])
                     }
                     all_events.append(formatted_event)
+            else:
+                app.logger.warning(f"Could not select calendar: {calendar_name}")
         
+        app.logger.info(f"Returning {len(all_events)} total events")
         return jsonify(all_events)
     
     elif request.method == 'POST':
@@ -922,6 +1140,7 @@ def api_events():
                     pass
             
             rrule = ';'.join(rrule_parts)
+            app.logger.info(f"Created RRULE: {rrule}")
         
         # Create the event
         try:
