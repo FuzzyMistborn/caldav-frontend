@@ -1,12 +1,4 @@
-// Delete event handler
-    document.getElementById('deleteEventBtn').addEventListener('click', function() {
-        const eventId = document.getElementById('eventId').value;
-        const eventUrl = document.getElementById('eventUrl').value;
-        const title = document.getElementById('eventTitle').value;
-        const isRecurring = document.getElementById('isRecurringEvent').value === 'true';
-
-        if (!eventId || !eventUrl) {
-            showToast('Cannot delete event: missing event information', 'error');{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}Calendar - CalDAV Web Client{% endblock %}
 
@@ -602,6 +594,60 @@ document.addEventListener('DOMContentLoaded', function() {
         let html = '';
         calendars.forEach((calInfo, index) => {
             const calName = Array.isArray(calInfo) ? calInfo[0] : calInfo;
+            const color = getCalendarColor(calName, index);
+            const isSelected = selectedCalendars.includes(calName);
+            
+            html += `
+                <div class="form-check mb-2">
+                    <input class="form-check-input calendar-toggle" type="checkbox" 
+                           value="${calName}" id="cal_${index}" ${isSelected ? 'checked' : ''}
+                           data-color="${color}">
+                    <label class="form-check-label d-flex align-items-center" for="cal_${index}">
+                        <span class="badge me-2" style="background-color: ${color}; width: 16px; height: 16px; border-radius: 50%;">&nbsp;</span>
+                        <span class="flex-grow-1">${calName}</span>
+                        ${isSelected ? '<i class="fas fa-eye text-success ms-1"></i>' : '<i class="fas fa-eye-slash text-muted ms-1"></i>'}
+                    </label>
+                </div>
+            `;
+        });
+        
+        if (html === '') {
+            html = '<div class="text-warning">No calendars found</div>';
+        }
+        
+        calendarListEl.innerHTML = html;
+        
+        document.querySelectorAll('.calendar-toggle').forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                updateCalendarSelection();
+                updateSidebarButtonText();
+            });
+        });
+        
+        updateSidebarButtonText();
+    }
+
+    function updateSidebarButtonText() {
+        const selectedCount = document.querySelectorAll('.calendar-toggle:checked').length;
+        const totalCount = document.querySelectorAll('.calendar-toggle').length;
+        const sidebarToggle = document.getElementById('sidebarToggle');
+        
+        if (sidebarToggle) {
+            sidebarToggle.innerHTML = `Calendars (${selectedCount}/${totalCount})`;
+        }
+    }
+
+    function updateColorSettings(calendars) {
+        const colorSettingsEl = document.getElementById('colorSettings');
+        if (!colorSettingsEl) {
+            console.error('colorSettings element not found');
+            return;
+        }
+        
+        let html = '';
+        
+        calendars.forEach((calInfo, index) => {
+            const calName = Array.isArray(calInfo) ? calInfo[0] : calInfo;
             const currentColor = getCalendarColor(calName, index);
             
             html += `
@@ -713,7 +759,7 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('eventLocation').value = event.extendedProps?.location || '';
             document.getElementById('deleteEventBtn').style.display = 'inline-block';
             
-            // Store recurring event information - FIXED
+            // Store recurring event information
             const isRecurring = event.extendedProps?.is_recurring || false;
             document.getElementById('isRecurringEvent').value = isRecurring ? 'true' : 'false';
             document.getElementById('eventOriginalUid').value = event.extendedProps?.original_uid || event.id;
@@ -892,7 +938,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const originalText = deleteBtn.textContent;
         
         deleteBtn.disabled = true;
-        confirmBtn.disabled = true;
+        if (confirmBtn) confirmBtn.disabled = true;
         deleteBtn.textContent = 'Deleting...';
 
         const requestData = { url: eventUrl };
@@ -904,7 +950,7 @@ document.addEventListener('DOMContentLoaded', function() {
             requestData.originalUid = document.getElementById('eventOriginalUid').value;
         }
 
-        fetch(`/api/events/${eventId}`, {
+        fetch(`/api/events/${encodeURIComponent(eventId)}`, {
             method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json'
@@ -914,6 +960,7 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
+                eventModal.hide();
                 calendar.refetchEvents();
                 showToast('Event deleted successfully!', 'success');
             } else {
@@ -926,7 +973,7 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .finally(() => {
             deleteBtn.disabled = false;
-            confirmBtn.disabled = false;
+            if (confirmBtn) confirmBtn.disabled = false;
             deleteBtn.textContent = originalText;
         });
     }
@@ -1098,7 +1145,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const isUpdate = eventId && eventId.trim() !== '';
         const method = isUpdate ? 'PUT' : 'POST';
-        const url = isUpdate ? `/api/events/${eventId}` : '/api/events';
+        const url = isUpdate ? `/api/events/${encodeURIComponent(eventId)}` : '/api/events';
 
         const saveBtn = document.getElementById('saveEventBtn');
         const originalText = saveBtn.textContent;
@@ -1233,53 +1280,4 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 });
 </script>
-{% endblock %} color = getCalendarColor(calName, index);
-            const isSelected = selectedCalendars.includes(calName);
-            
-            html += `
-                <div class="form-check mb-2">
-                    <input class="form-check-input calendar-toggle" type="checkbox" 
-                           value="${calName}" id="cal_${index}" ${isSelected ? 'checked' : ''}
-                           data-color="${color}">
-                    <label class="form-check-label d-flex align-items-center" for="cal_${index}">
-                        <span class="badge me-2" style="background-color: ${color}; width: 16px; height: 16px; border-radius: 50%;">&nbsp;</span>
-                        <span class="flex-grow-1">${calName}</span>
-                        ${isSelected ? '<i class="fas fa-eye text-success ms-1"></i>' : '<i class="fas fa-eye-slash text-muted ms-1"></i>'}
-                    </label>
-                </div>
-            `;
-        });
-        
-        if (html === '') {
-            html = '<div class="text-warning">No calendars found</div>';
-        }
-        
-        calendarListEl.innerHTML = html;
-        
-        document.querySelectorAll('.calendar-toggle').forEach(checkbox => {
-            checkbox.addEventListener('change', function() {
-                updateCalendarSelection();
-                updateSidebarButtonText();
-            });
-        });
-        
-        updateSidebarButtonText();
-    }
-
-    function updateSidebarButtonText() {
-        const selectedCount = document.querySelectorAll('.calendar-toggle:checked').length;
-        const totalCount = document.querySelectorAll('.calendar-toggle').length;
-        const sidebarToggle = document.getElementById('sidebarToggle');
-        
-        if (sidebarToggle) {
-            sidebarToggle.innerHTML = `Calendars (${selectedCount}/${totalCount})`;
-        }
-    }
-
-    function updateColorSettings(calendars) {
-        const colorSettingsEl = document.getElementById('colorSettings');
-        let html = '';
-        
-        calendars.forEach((calInfo, index) => {
-            const calName = Array.isArray(calInfo) ? calInfo[0] : calInfo;
-            const
+{% endblock %}
