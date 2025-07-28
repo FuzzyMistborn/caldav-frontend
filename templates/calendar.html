@@ -1,4 +1,12 @@
-{% extends "base.html" %}
+// Delete event handler
+    document.getElementById('deleteEventBtn').addEventListener('click', function() {
+        const eventId = document.getElementById('eventId').value;
+        const eventUrl = document.getElementById('eventUrl').value;
+        const title = document.getElementById('eventTitle').value;
+        const isRecurring = document.getElementById('isRecurringEvent').value === 'true';
+
+        if (!eventId || !eventUrl) {
+            showToast('Cannot delete event: missing event information', 'error');{% extends "base.html" %}
 
 {% block title %}Calendar - CalDAV Web Client{% endblock %}
 
@@ -705,7 +713,7 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('eventLocation').value = event.extendedProps?.location || '';
             document.getElementById('deleteEventBtn').style.display = 'inline-block';
             
-            // Store recurring event information
+            // Store recurring event information - FIXED
             const isRecurring = event.extendedProps?.is_recurring || false;
             document.getElementById('isRecurringEvent').value = isRecurring ? 'true' : 'false';
             document.getElementById('eventOriginalUid').value = event.extendedProps?.original_uid || event.id;

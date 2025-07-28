@@ -887,10 +887,10 @@ def update_settings():
     
     return jsonify({'success': True})
 
-# THE CRITICAL DELETE ENDPOINT - This should definitely work now
+# THE CRITICAL DELETE ENDPOINT - Now with proper recurring support
 @app.route('/api/events/<path:event_id>', methods=['DELETE'])
 def api_delete_event(event_id):
-    """API endpoint to delete event with extensive debugging"""
+    """API endpoint to delete event with recurring options support"""
     # URL decode the event_id
     event_id = unquote(event_id)
     print(f"DEBUG: Delete request received for event_id: {event_id}")
@@ -970,20 +970,55 @@ def api_delete_event(event_id):
         print(f"DEBUG: Exception during calendar selection: {e}")
         return jsonify({'error': f'Calendar selection error: {str(e)}'}), 500
     
-    # For now, let's just focus on simple deletion to test
+    # Handle different delete types
     success = False
     error_message = None
     
     try:
-        print(f"DEBUG: Starting deletion process")
-        success = client.delete_event(event_url)
-        print(f"DEBUG: Deletion result: {success}")
+        print(f"DEBUG: Starting deletion process for type: {delete_type}")
+        
+        if delete_type == 'single':
+            print("DEBUG: Attempting single event deletion")
+            success = client.delete_event(event_url)
+            print(f"DEBUG: Single deletion result: {success}")
+            
+        elif delete_type == 'this':
+            print("DEBUG: Attempting single occurrence deletion of recurring event")
+            if not original_uid or not event_date:
+                error_message = 'Missing original UID or event date for recurring deletion'
+                print(f"DEBUG: {error_message}")
+                return jsonify({'error': error_message}), 400
+            success = client.delete_recurring_occurrence(event_url, original_uid, event_date)
+            print(f"DEBUG: Recurring occurrence deletion result: {success}")
+            
+        elif delete_type == 'future':
+            print("DEBUG: Attempting future occurrences deletion")
+            if not original_uid or not event_date:
+                error_message = 'Missing original UID or event date for future deletion'
+                print(f"DEBUG: {error_message}")
+                return jsonify({'error': error_message}), 400
+            success = client.delete_recurring_future(event_url, original_uid, event_date)
+            print(f"DEBUG: Future deletion result: {success}")
+            
+        elif delete_type == 'all':
+            print("DEBUG: Attempting entire series deletion")
+            if not original_uid:
+                error_message = 'Missing original UID for series deletion'
+                print(f"DEBUG: {error_message}")
+                return jsonify({'error': error_message}), 400
+            success = client.delete_recurring_series(original_uid)
+            print(f"DEBUG: Series deletion result: {success}")
+            
+        else:
+            error_message = f'Invalid delete type: {delete_type}'
+            print(f"DEBUG: {error_message}")
+            return jsonify({'error': error_message}), 400
         
         if success:
-            print(f"DEBUG: Event deletion successful")
+            print(f"DEBUG: Event deletion successful for type: {delete_type}")
             return jsonify({'success': True})
         else:
-            error_message = f'Failed to delete event'
+            error_message = f'Failed to delete event (type: {delete_type})'
             print(f"DEBUG: {error_message}")
             return jsonify({'error': error_message}), 500
             
