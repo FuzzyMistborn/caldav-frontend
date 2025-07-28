@@ -1470,6 +1470,15 @@ def internal_error(error):
     app.logger.error(f"Internal error: {error}")
     return jsonify({'error': 'Internal server error'}), 500
 
+@app.route('/api/test-create', methods=['POST'])
+def test_create():
+    print("DEBUG: Test create endpoint called")
+    return jsonify({'test': 'success'})
+
+print("DEBUG: All registered routes:")
+for rule in app.url_map.iter_rules():
+    print(f"  {rule.endpoint}: {rule.rule} {list(rule.methods)}")
+
 if __name__ == '__main__':
     # Get port from environment variable or default to 5000
     port = int(os.environ.get('PORT', 5000))
