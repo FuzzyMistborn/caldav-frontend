@@ -217,13 +217,43 @@ class CalDAVClient:
             for component in cal.walk():
                 if component.name == "VEVENT":
                     try:
+                        # Get the original DTSTART to understand the format we need
+                        dtstart = component.get('dtstart')
+                        if not dtstart:
+                            print("DEBUG: No DTSTART found in event")
+                            return False
+                        
+                        original_start = dtstart.dt
+                        print(f"DEBUG: Original DTSTART: {original_start}, type: {type(original_start)}")
+                        
                         # Parse the event date - handle different formats
                         if 'T' in event_date:
-                            exception_date = datetime.fromisoformat(event_date.replace('Z', '')).date()
+                            exception_date = datetime.fromisoformat(event_date.replace('Z', ''))
                         else:
-                            exception_date = datetime.fromisoformat(event_date).date()
+                            exception_date = datetime.fromisoformat(event_date)
                         
-                        print(f"DEBUG: Adding EXDATE for: {exception_date}")
+                        print(f"DEBUG: Exception date parsed: {exception_date}")
+                        
+                        # Format the exception date to match the original event format
+                        if hasattr(original_start, 'date'):
+                            # It's a datetime object, create a datetime for the same time on the exception date
+                            if hasattr(original_start, 'hour'):
+                                # Full datetime
+                                exception_datetime = datetime.combine(
+                                    exception_date.date(), 
+                                    original_start.time()
+                                )
+                                print(f"DEBUG: Created exception datetime: {exception_datetime}")
+                            else:
+                                # Date only
+                                exception_datetime = exception_date.date()
+                                print(f"DEBUG: Created exception date: {exception_datetime}")
+                        else:
+                            # Fallback - use the date part
+                            exception_datetime = exception_date.date()
+                            print(f"DEBUG: Fallback exception date: {exception_datetime}")
+                        
+                        print(f"DEBUG: Adding EXDATE for: {exception_datetime}")
                         
                         # Add EXDATE property
                         if 'exdate' in component:
@@ -231,18 +261,20 @@ class CalDAVClient:
                             existing_exdates = component['exdate']
                             if not isinstance(existing_exdates, list):
                                 existing_exdates = [existing_exdates]
-                            existing_exdates.append(exception_date)
+                            existing_exdates.append(exception_datetime)
                             component['exdate'] = existing_exdates
                             print(f"DEBUG: Added to existing EXDATE list")
                         else:
                             # Create new EXDATE
-                            component.add('exdate', exception_date)
+                            component.add('exdate', exception_datetime)
                             print(f"DEBUG: Created new EXDATE")
                         
                         event_modified = True
                         break
                     except Exception as e:
                         print(f"DEBUG: Error adding EXDATE: {e}")
+                        import traceback
+                        print(f"DEBUG: EXDATE traceback: {traceback.format_exc()}")
                         return False
             
             if not event_modified:
@@ -251,12 +283,22 @@ class CalDAVClient:
             
             # Save the modified event
             try:
-                original_event.data = cal.to_ical()
+                updated_ical = cal.to_ical()
+                print(f"DEBUG: Generated updated iCal data length: {len(updated_ical)} bytes")
+                
+                # Log a portion of the updated iCal for debugging
+                ical_str = updated_ical.decode('utf-8') if isinstance(updated_ical, bytes) else str(updated_ical)
+                print("DEBUG: Updated iCal preview (first 500 chars):")
+                print(ical_str[:500])
+                
+                original_event.data = updated_ical
                 original_event.save()
                 print("DEBUG: Successfully saved modified recurring event with EXDATE")
                 return True
             except Exception as e:
                 print(f"DEBUG: Error saving modified event: {e}")
+                import traceback
+                print(f"DEBUG: Save traceback: {traceback.format_exc()}")
                 return False
                 
         except Exception as e:
