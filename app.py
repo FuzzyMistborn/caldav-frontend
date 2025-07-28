@@ -1,49 +1,3 @@
-def create_event(self, summary, description, location, start_dt, end_dt, rrule=None):
-        """Create a new event with optional recurrence and location"""
-        if not self.calendar:
-            return False
-        
-        try:
-            # Ensure timezone-naive datetimes for CalDAV compatibility
-            if hasattr(start_dt, 'tzinfo') and start_dt.tzinfo:
-                start_dt = start_dt.replace(tzinfo=None)
-            if hasattr(end_dt, 'tzinfo') and end_dt.tzinfo:
-                end_dt = end_dt.replace(tzinfo=None)
-            
-            cal = Calendar()
-            cal.add('prodid', '-//CalDAV Web Client//Enhanced//')
-            cal.add('version', '2.0')
-            
-            event = ICalEvent()
-            event.add('summary', summary)
-            event.add('description', description)
-            if location:
-                event.add('location', location)
-            event.add('dtstart', start_dt)
-            event.add('dtend', end_dt)
-            event.add('dtstamp', datetime.now(pytz.UTC).replace(tzinfo=None))
-            event.add('uid', str(uuid.uuid4()))
-            
-            # Add recurrence rule if provided
-            if rrule:
-                try:
-                    # Parse and add RRULE
-                    rrule_dict = self.parse_rrule_string(rrule)
-                    if rrule_dict:
-                        recur = vRecur(rrule_dict)
-                        event.add('rrule', recur)
-                except Exception as e:
-                    app.logger.error(f"Error adding RRULE: {e}")
-            
-            cal.add_component(event)
-            
-            ical_data = cal.to_ical()
-            
-            self.calendar.save_event(ical_data)
-            return True
-        except Exception as e:
-            app.logger.error(f"Error creating event: {e}")
-            return False#!/usr/bin/env python3
 """
 CalDAV Web Client for Nextcloud
 A Flask-based web application for managing calendar events via CalDAV
@@ -61,6 +15,21 @@ import pytz
 from icalendar import Calendar, Event as ICalEvent, vRecur
 import uuid
 from dotenv import load_dotenv
+import sys
+import logging
+
+# Configure logging to show debug messages
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.StreamHandler(sys.stderr)
+    ]
+)
+
+# Also ensure Flask debug mode is on
+app.debug = True
 
 # Load environment variables
 load_dotenv()
