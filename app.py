@@ -188,6 +188,240 @@ class CalDAVClient:
             print(f"DEBUG: Full traceback: {traceback.format_exc()}")
             return False
 
+    def delete_recurring_occurrence(self, event_url, original_uid, event_date):
+        """Delete only a specific occurrence of a recurring event"""
+        try:
+            print(f"DEBUG: Attempting to delete recurring occurrence: {original_uid} on {event_date}")
+            
+            # Find the original recurring event by UID
+            original_event = self.find_event_by_uid(original_uid)
+            if not original_event:
+                print(f"DEBUG: Could not find original event with UID: {original_uid}")
+                return False
+            
+            print(f"DEBUG: Found original event for UID: {original_uid}")
+            
+            # Get the event data
+            try:
+                raw_data = original_event.data
+                if isinstance(raw_data, bytes):
+                    raw_data = raw_data.decode('utf-8', errors='ignore')
+                
+                cal = Calendar.from_ical(raw_data)
+            except Exception as e:
+                print(f"DEBUG: Error parsing original event data: {e}")
+                return False
+            
+            # Add an EXDATE (exception date) to exclude this occurrence
+            event_modified = False
+            for component in cal.walk():
+                if component.name == "VEVENT":
+                    try:
+                        # Parse the event date - handle different formats
+                        if 'T' in event_date:
+                            exception_date = datetime.fromisoformat(event_date.replace('Z', '')).date()
+                        else:
+                            exception_date = datetime.fromisoformat(event_date).date()
+                        
+                        print(f"DEBUG: Adding EXDATE for: {exception_date}")
+                        
+                        # Add EXDATE property
+                        if 'exdate' in component:
+                            # Add to existing EXDATE
+                            existing_exdates = component['exdate']
+                            if not isinstance(existing_exdates, list):
+                                existing_exdates = [existing_exdates]
+                            existing_exdates.append(exception_date)
+                            component['exdate'] = existing_exdates
+                            print(f"DEBUG: Added to existing EXDATE list")
+                        else:
+                            # Create new EXDATE
+                            component.add('exdate', exception_date)
+                            print(f"DEBUG: Created new EXDATE")
+                        
+                        event_modified = True
+                        break
+                    except Exception as e:
+                        print(f"DEBUG: Error adding EXDATE: {e}")
+                        return False
+            
+            if not event_modified:
+                print("DEBUG: No VEVENT component found to modify")
+                return False
+            
+            # Save the modified event
+            try:
+                original_event.data = cal.to_ical()
+                original_event.save()
+                print("DEBUG: Successfully saved modified recurring event with EXDATE")
+                return True
+            except Exception as e:
+                print(f"DEBUG: Error saving modified event: {e}")
+                return False
+                
+        except Exception as e:
+            print(f"DEBUG: Error deleting recurring occurrence: {e}")
+            import traceback
+            print(f"DEBUG: Full traceback: {traceback.format_exc()}")
+            return False
+
+    def delete_recurring_future(self, event_url, original_uid, event_date):
+        """Delete this occurrence and all future occurrences"""
+        try:
+            print(f"DEBUG: Attempting to delete future recurring events: {original_uid} from {event_date}")
+            
+            # Find the original recurring event by UID
+            original_event = self.find_event_by_uid(original_uid)
+            if not original_event:
+                print(f"DEBUG: Could not find original event with UID: {original_uid}")
+                return False
+            
+            print(f"DEBUG: Found original event for UID: {original_uid}")
+            
+            # Get the event data
+            try:
+                raw_data = original_event.data
+                if isinstance(raw_data, bytes):
+                    raw_data = raw_data.decode('utf-8', errors='ignore')
+                
+                cal = Calendar.from_ical(raw_data)
+            except Exception as e:
+                print(f"DEBUG: Error parsing original event data: {e}")
+                return False
+            
+            # Modify the RRULE to end before this date
+            event_modified = False
+            for component in cal.walk():
+                if component.name == "VEVENT":
+                    try:
+                        # Parse the event date and set UNTIL to day before
+                        if 'T' in event_date:
+                            until_date = datetime.fromisoformat(event_date.replace('Z', '')) - timedelta(days=1)
+                        else:
+                            until_date = datetime.fromisoformat(event_date) - timedelta(days=1)
+                        
+                        print(f"DEBUG: Setting RRULE UNTIL date to: {until_date}")
+                        
+                        # Get existing RRULE
+                        rrule = component.get('rrule')
+                        if rrule:
+                            # Convert to dict and modify
+                            rrule_dict = {}
+                            for key, value in rrule.items():
+                                rrule_dict[key] = value
+                            
+                            # Set UNTIL date and remove COUNT if present
+                            rrule_dict['UNTIL'] = until_date
+                            if 'COUNT' in rrule_dict:
+                                del rrule_dict['COUNT']
+                                print("DEBUG: Removed COUNT from RRULE")
+                            
+                            # Update the component
+                            new_recur = vRecur(rrule_dict)
+                            component['rrule'] = new_recur
+                            print(f"DEBUG: Updated RRULE with UNTIL: {until_date}")
+                            event_modified = True
+                        else:
+                            print("DEBUG: No RRULE found in event - treating as single event deletion")
+                            # If no RRULE, just delete the whole event
+                            return self.delete_event(event_url)
+                        break
+                    except Exception as e:
+                        print(f"DEBUG: Error modifying RRULE: {e}")
+                        return False
+            
+            if not event_modified:
+                print("DEBUG: No VEVENT component with RRULE found to modify")
+                return False
+            
+            # Save the modified event
+            try:
+                original_event.data = cal.to_ical()
+                original_event.save()
+                print("DEBUG: Successfully saved modified recurring event with updated RRULE")
+                return True
+            except Exception as e:
+                print(f"DEBUG: Error saving modified event: {e}")
+                return False
+                
+        except Exception as e:
+            print(f"DEBUG: Error deleting future recurring events: {e}")
+            import traceback
+            print(f"DEBUG: Full traceback: {traceback.format_exc()}")
+            return False
+
+    def delete_recurring_series(self, original_uid):
+        """Delete the entire recurring event series"""
+        try:
+            print(f"DEBUG: Attempting to delete entire recurring series: {original_uid}")
+            
+            # Find the original recurring event by UID
+            original_event = self.find_event_by_uid(original_uid)
+            if not original_event:
+                print(f"DEBUG: Could not find original event with UID: {original_uid}")
+                return False
+            
+            print(f"DEBUG: Found original event for UID: {original_uid}")
+            
+            # Delete the entire event
+            try:
+                original_event.delete()
+                print("DEBUG: Successfully deleted entire recurring event series")
+                return True
+            except Exception as e:
+                print(f"DEBUG: Error deleting event: {e}")
+                return False
+                
+        except Exception as e:
+            print(f"DEBUG: Error deleting recurring series: {e}")
+            import traceback
+            print(f"DEBUG: Full traceback: {traceback.format_exc()}")
+            return False
+
+    def find_event_by_uid(self, uid):
+        """Find an event by its UID with improved logging"""
+        try:
+            print(f"DEBUG: Searching for event with UID: {uid}")
+            
+            # Clean the UID (remove recurrence suffix if present)
+            clean_uid = uid.split('_recurrence_')[0] if '_recurrence_' in uid else uid
+            print(f"DEBUG: Cleaned UID: {clean_uid}")
+            
+            if not self.calendar:
+                print("DEBUG: No calendar selected")
+                return None
+            
+            all_objects = list(self.calendar.objects())
+            print(f"DEBUG: Searching through {len(all_objects)} calendar objects")
+            
+            for i, obj in enumerate(all_objects):
+                try:
+                    raw_data = obj.data
+                    if isinstance(raw_data, bytes):
+                        raw_data = raw_data.decode('utf-8', errors='ignore')
+                    
+                    if f'UID:{clean_uid}' in raw_data:
+                        print(f"DEBUG: Found event with UID {clean_uid} at object index {i}")
+                        return obj
+                        
+                    # Also check for UID without colon (some formats)
+                    if f'UID {clean_uid}' in raw_data or clean_uid in raw_data:
+                        print(f"DEBUG: Found event with UID {clean_uid} (alternative format) at object index {i}")
+                        return obj
+                        
+                except Exception as e:
+                    print(f"DEBUG: Error checking object {i}: {e}")
+                    continue
+            
+            print(f"DEBUG: No event found with UID: {clean_uid}")
+            return None
+            
+        except Exception as e:
+            print(f"DEBUG: Error finding event by UID: {e}")
+            import traceback
+            print(f"DEBUG: Full traceback: {traceback.format_exc()}")
+            return None
+
     def get_events(self, start_date, end_date):
         """Get events - clean version without test events"""
         if not self.calendar:
