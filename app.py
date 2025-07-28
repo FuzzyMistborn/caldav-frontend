@@ -932,83 +932,208 @@ def select_calendar():
                          calendars=calendars,
                          selected_calendars=selected_calendars)
 
-@app.route('/api/events')
+@app.route('/api/events', methods=['GET', 'POST'])
 def api_events():
-    """API endpoint to get events from multiple calendars"""
-    if 'username' not in session:
-        return jsonify({'error': 'Not authenticated - please log in again'}), 401
+    """API endpoint to handle both GET (fetch events) and POST (create events)"""
+    if request.method == 'GET':
+        # Handle GET request (existing code)
+        if 'username' not in session:
+            return jsonify({'error': 'Not authenticated - please log in again'}), 401
+        
+        start_date = request.args.get('start')
+        end_date = request.args.get('end')
+        
+        if not start_date or not end_date:
+            return jsonify({'error': 'Missing date parameters'}), 400
+        
+        try:
+            start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        except ValueError:
+            return jsonify({'error': 'Invalid date format'}), 400
+        
+        # Check if we have CalDAV connection info in session
+        if not all(key in session for key in ['username', 'password', 'caldav_url']):
+            return jsonify({'error': 'Session incomplete - please log in again'}), 401
+        
+        client = CalDAVClient(session['username'], session['password'], 
+                             session['caldav_url'], session.get('server_type', 'generic'))
+        
+        if not client.connect():
+            return jsonify({'error': 'CalDAV connection failed - please check credentials'}), 500
+        
+        # Get events from all selected calendars
+        all_events = []
+        prefs = get_user_preferences()
+        selected_calendars = prefs.get('selected_calendars', [])
+        calendar_colors = prefs.get('calendar_colors', {})
+        
+        # If no selected calendars, use all available calendars
+        if not selected_calendars:
+            app.logger.info("No selected calendars found, using all available calendars")
+            calendars = client.get_calendars()
+            selected_calendars = [cal[0] for cal in calendars]
+            prefs['selected_calendars'] = selected_calendars
+            save_user_preferences(prefs)
+        
+        # Define default colors
+        default_calendar_colors = [
+            '#3788d8', '#28a745', '#dc3545', '#ffc107', '#6f42c1',
+            '#fd7e14', '#20c997', '#e83e8c', '#6c757d', '#17a2b8'
+        ]
+        
+        for i, calendar_name in enumerate(selected_calendars):
+            if client.select_calendar(calendar_name):
+                events = client.get_events(start_dt, end_dt)
+                
+                # Get color from preferences or use default
+                color = calendar_colors.get(calendar_name, 
+                                          default_calendar_colors[i % len(default_calendar_colors)])
+                
+                for event in events:
+                    formatted_event = {
+                        'id': f"{calendar_name}:{event['uid']}",
+                        'title': event['summary'],
+                        'start': event['start'].isoformat(),
+                        'end': event['end'].isoformat(),
+                        'description': event['description'],
+                        'location': event.get('location', ''),
+                        'url': event['url'],
+                        'backgroundColor': color,
+                        'borderColor': color,
+                        'calendar_name': calendar_name,
+                        'is_recurring': event.get('is_recurring', False),
+                        'original_uid': event.get('original_uid', event['uid'])
+                    }
+                    all_events.append(formatted_event)
+            else:
+                app.logger.warning(f"Could not select calendar: {calendar_name}")
+        
+        app.logger.info(f"Returning {len(all_events)} events from {len(selected_calendars)} calendars")
+        return jsonify(all_events)
     
-    start_date = request.args.get('start')
-    end_date = request.args.get('end')
-    
-    if not start_date or not end_date:
-        return jsonify({'error': 'Missing date parameters'}), 400
-    
-    try:
-        start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
-        end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-    except ValueError:
-        return jsonify({'error': 'Invalid date format'}), 400
-    
-    # Check if we have CalDAV connection info in session
-    if not all(key in session for key in ['username', 'password', 'caldav_url']):
-        return jsonify({'error': 'Session incomplete - please log in again'}), 401
-    
-    client = CalDAVClient(session['username'], session['password'], 
-                         session['caldav_url'], session.get('server_type', 'generic'))
-    
-    if not client.connect():
-        return jsonify({'error': 'CalDAV connection failed - please check credentials'}), 500
-    
-    # Get events from all selected calendars
-    all_events = []
-    prefs = get_user_preferences()
-    selected_calendars = prefs.get('selected_calendars', [])
-    calendar_colors = prefs.get('calendar_colors', {})
-    
-    # If no selected calendars, use all available calendars
-    if not selected_calendars:
-        app.logger.info("No selected calendars found, using all available calendars")
-        calendars = client.get_calendars()
-        selected_calendars = [cal[0] for cal in calendars]
-        prefs['selected_calendars'] = selected_calendars
-        save_user_preferences(prefs)
-    
-    # Define default colors
-    default_calendar_colors = [
-        '#3788d8', '#28a745', '#dc3545', '#ffc107', '#6f42c1',
-        '#fd7e14', '#20c997', '#e83e8c', '#6c757d', '#17a2b8'
-    ]
-    
-    for i, calendar_name in enumerate(selected_calendars):
-        if client.select_calendar(calendar_name):
-            events = client.get_events(start_dt, end_dt)
+    elif request.method == 'POST':
+        # Handle POST request (create event)
+        print("DEBUG: Create event request received")
+        
+        if 'username' not in session:
+            print("DEBUG: User not authenticated for create")
+            return jsonify({'error': 'Not authenticated'}), 401
+        
+        data = request.get_json()
+        if not data:
+            print("DEBUG: No data provided for create")
+            return jsonify({'error': 'No data provided'}), 400
+        
+        print(f"DEBUG: Create event data: {data}")
+        
+        try:
+            start_dt = datetime.fromisoformat(data['start'].replace('Z', '+00:00'))
+            end_dt = datetime.fromisoformat(data['end'].replace('Z', '+00:00'))
+            print(f"DEBUG: Parsed dates - Start: {start_dt}, End: {end_dt}")
+        except (ValueError, KeyError) as e:
+            print(f"DEBUG: Invalid date format: {e}")
+            return jsonify({'error': 'Invalid date format'}), 400
+        
+        # Determine target calendar
+        prefs = get_user_preferences()
+        target_calendar = data.get('calendar_name')
+        if not target_calendar:
+            # First try user's default calendar
+            if prefs.get('default_calendar'):
+                target_calendar = prefs['default_calendar']
+            else:
+                # Fall back to first selected calendar
+                selected_calendars = prefs.get('selected_calendars', [])
+                if not selected_calendars:
+                    # If no selected calendars, try to get first available calendar
+                    available_calendars = prefs.get('available_calendars', [])
+                    if available_calendars:
+                        target_calendar = available_calendars[0][0]
+                    else:
+                        print("DEBUG: No calendars available for create")
+                        return jsonify({'error': 'No calendars available'}), 400
+                else:
+                    target_calendar = selected_calendars[0]
+        
+        print(f"DEBUG: Target calendar: {target_calendar}")
+        
+        # Check CalDAV connection info
+        if not all(key in session for key in ['username', 'password', 'caldav_url']):
+            print("DEBUG: Session incomplete for create")
+            return jsonify({'error': 'Session incomplete - please log in again'}), 401
+        
+        # Create CalDAV client
+        try:
+            client = CalDAVClient(session['username'], session['password'], 
+                                 session['caldav_url'], session.get('server_type', 'generic'))
+            print("DEBUG: CalDAV client created for create")
+        except Exception as e:
+            print(f"DEBUG: Error creating CalDAV client for create: {e}")
+            return jsonify({'error': f'CalDAV client error: {str(e)}'}), 500
+        
+        try:
+            if not client.connect():
+                print("DEBUG: CalDAV connection failed for create")
+                return jsonify({'error': 'CalDAV connection failed'}), 500
+            print("DEBUG: CalDAV connected for create")
+        except Exception as e:
+            print(f"DEBUG: CalDAV connection exception for create: {e}")
+            return jsonify({'error': f'CalDAV connection error: {str(e)}'}), 500
+        
+        try:
+            if not client.select_calendar(target_calendar):
+                print(f"DEBUG: Calendar selection failed for create: {target_calendar}")
+                return jsonify({'error': f'Calendar "{target_calendar}" not found'}), 500
+            print(f"DEBUG: Calendar selected for create: {target_calendar}")
+        except Exception as e:
+            print(f"DEBUG: Calendar selection exception for create: {e}")
+            return jsonify({'error': f'Calendar selection error: {str(e)}'}), 500
+        
+        # Build RRULE string if recurrence is specified
+        rrule = None
+        if data.get('recurring') and data.get('recurring') != 'none':
+            rrule_parts = [f"FREQ={data['recurring'].upper()}"]
             
-            # Get color from preferences or use default
-            color = calendar_colors.get(calendar_name, 
-                                      default_calendar_colors[i % len(default_calendar_colors)])
+            if data.get('recurring_interval') and int(data.get('recurring_interval', 1)) > 1:
+                rrule_parts.append(f"INTERVAL={data['recurring_interval']}")
             
-            for event in events:
-                formatted_event = {
-                    'id': f"{calendar_name}:{event['uid']}",
-                    'title': event['summary'],
-                    'start': event['start'].isoformat(),
-                    'end': event['end'].isoformat(),
-                    'description': event['description'],
-                    'location': event.get('location', ''),
-                    'url': event['url'],
-                    'backgroundColor': color,
-                    'borderColor': color,
-                    'calendar_name': calendar_name,
-                    'is_recurring': event.get('is_recurring', False),
-                    'original_uid': event.get('original_uid', event['uid'])
-                }
-                all_events.append(formatted_event)
-        else:
-            app.logger.warning(f"Could not select calendar: {calendar_name}")
-    
-    app.logger.info(f"Returning {len(all_events)} events from {len(selected_calendars)} calendars")
-    return jsonify(all_events)
+            if data.get('recurring_count'):
+                rrule_parts.append(f"COUNT={data['recurring_count']}")
+            elif data.get('recurring_until'):
+                # Convert until date to proper format
+                try:
+                    until_date = datetime.fromisoformat(data['recurring_until'] + 'T23:59:59')
+                    rrule_parts.append(f"UNTIL={until_date.strftime('%Y%m%dT%H%M%SZ')}")
+                except Exception as e:
+                    print(f"DEBUG: Error parsing recurring_until date: {e}")
+            
+            rrule = ';'.join(rrule_parts)
+            print(f"DEBUG: Built RRULE: {rrule}")
+        
+        # Create the event
+        try:
+            success = client.create_event(
+                data.get('title', ''),
+                data.get('description', ''),
+                data.get('location', ''),
+                start_dt,
+                end_dt,
+                rrule
+            )
+            
+            if success:
+                print("DEBUG: Event created successfully")
+                return jsonify({'success': True})
+            else:
+                print("DEBUG: Failed to create event")
+                return jsonify({'error': 'Failed to create event'}), 500
+                
+        except Exception as e:
+            print(f"DEBUG: Exception during event creation: {e}")
+            import traceback
+            print(f"DEBUG: Create exception traceback: {traceback.format_exc()}")
+            return jsonify({'error': f'Error creating event: {str(e)}'}), 500
 
 @app.route('/api/calendar-selection', methods=['GET'])
 def get_calendar_selection():
