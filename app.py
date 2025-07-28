@@ -379,7 +379,7 @@ class CalDAVClient:
             return False
 
     def find_event_by_uid(self, uid):
-        """Find an event by its UID with improved logging"""
+        """Find an event by its UID with improved logging and error handling"""
         try:
             print(f"DEBUG: Searching for event with UID: {uid}")
             
@@ -396,17 +396,52 @@ class CalDAVClient:
             
             for i, obj in enumerate(all_objects):
                 try:
-                    raw_data = obj.data
+                    # Try to get the event data using multiple methods
+                    raw_data = None
+                    
+                    if hasattr(obj, 'data') and obj.data is not None:
+                        raw_data = obj.data
+                    elif hasattr(obj, 'get_data'):
+                        try:
+                            raw_data = obj.get_data()
+                        except Exception:
+                            pass
+                    elif hasattr(obj, 'load'):
+                        try:
+                            obj.load()
+                            raw_data = getattr(obj, 'data', None)
+                        except Exception:
+                            pass
+                    elif hasattr(obj, 'calendar_data'):
+                        raw_data = obj.calendar_data
+                    
+                    # Skip if we couldn't get any data
+                    if raw_data is None:
+                        print(f"DEBUG: No data available for object {i}")
+                        continue
+                    
+                    # Convert to string if it's bytes
                     if isinstance(raw_data, bytes):
                         raw_data = raw_data.decode('utf-8', errors='ignore')
                     
+                    # Make sure we have a string to search in
+                    if not isinstance(raw_data, str):
+                        print(f"DEBUG: Object {i} data is not a string: {type(raw_data)}")
+                        continue
+                    
+                    # Search for the UID in various formats
                     if f'UID:{clean_uid}' in raw_data:
                         print(f"DEBUG: Found event with UID {clean_uid} at object index {i}")
                         return obj
                         
                     # Also check for UID without colon (some formats)
-                    if f'UID {clean_uid}' in raw_data or clean_uid in raw_data:
-                        print(f"DEBUG: Found event with UID {clean_uid} (alternative format) at object index {i}")
+                    if f'UID {clean_uid}' in raw_data:
+                        print(f"DEBUG: Found event with UID {clean_uid} (space format) at object index {i}")
+                        return obj
+                    
+                    # Check if the UID appears anywhere in the data
+                    if clean_uid in raw_data:
+                        print(f"DEBUG: Found event with UID {clean_uid} (loose match) at object index {i}")
                         return obj
                         
                 except Exception as e:
@@ -414,6 +449,37 @@ class CalDAVClient:
                     continue
             
             print(f"DEBUG: No event found with UID: {clean_uid}")
+            
+            # Let's also try a more detailed search to see what UIDs we do have
+            print("DEBUG: Listing all found UIDs for debugging:")
+            for i, obj in enumerate(all_objects):
+                try:
+                    raw_data = None
+                    if hasattr(obj, 'data') and obj.data is not None:
+                        raw_data = obj.data
+                    elif hasattr(obj, 'get_data'):
+                        try:
+                            raw_data = obj.get_data()
+                        except Exception:
+                            continue
+                    
+                    if raw_data is None:
+                        continue
+                        
+                    if isinstance(raw_data, bytes):
+                        raw_data = raw_data.decode('utf-8', errors='ignore')
+                    
+                    if isinstance(raw_data, str) and 'UID:' in raw_data:
+                        # Extract UID for debugging
+                        lines = raw_data.split('\n')
+                        for line in lines:
+                            if line.startswith('UID:'):
+                                found_uid = line.replace('UID:', '').strip()
+                                print(f"DEBUG: Object {i} has UID: {found_uid}")
+                                break
+                except Exception:
+                    continue
+            
             return None
             
         except Exception as e:
