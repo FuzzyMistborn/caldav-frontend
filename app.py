@@ -724,3 +724,20 @@ class CalDAVClient:
                             app.logger.info("Event has RRULE - expanding recurring events")
                             expanded = self._expand_recurring_event(event_data, start_date, end_date)
                             events.extend(expanded)
+                            app.logger.info(f"Expanded into {len(expanded)} occurrences")
+                        else:
+                            events.append(event_data)
+                            app.logger.info("Added single event")
+                    else:
+                        app.logger.warning("Failed to parse VEVENT component")
+            
+            app.logger.info(f"Total components processed: {component_count}")
+            app.logger.info(f"Total events extracted: {len(events)}")
+            app.logger.info("=== END PARSING EVENT DATA ===")
+            
+            return events
+            
+        except Exception as e:
+            app.logger.error(f"Error in enhanced_parse_event: {e}")
+            app.logger.error(f"Traceback: {traceback.format_exc()}")
+            return []
