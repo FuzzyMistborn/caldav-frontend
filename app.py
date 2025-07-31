@@ -1455,7 +1455,9 @@ def api_delete_event(event_id):
     # Get delete options from request data
     try:
         data = request.get_json() or {}
-    except Exception:
+        app.logger.info(f"Delete request data: {data}")
+    except Exception as e:
+        app.logger.error(f"Error parsing request data: {e}")
         return jsonify({'error': 'Invalid JSON data'}), 400
     
     event_url = data.get('url')
@@ -1463,7 +1465,11 @@ def api_delete_event(event_id):
     event_date = data.get('eventDate')
     original_uid = data.get('originalUid')
     
-    app.logger.info(f"Delete type: {delete_type}, Event URL: {event_url}")
+    app.logger.info(f"Delete type: {delete_type}")
+    app.logger.info(f"Event URL: {event_url}")
+    app.logger.info(f"Event date: {event_date}")
+    app.logger.info(f"Original UID: {original_uid}")
+    app.logger.info(f"Is recurring event: {uid.endswith('_recurrence_0') or '_recurrence_' in uid}")
     
     # Check session data
     if not all(key in session for key in ['username', 'password', 'caldav_url']):
