@@ -908,22 +908,53 @@ class CalDAVClient:
                     
                     for exdate in exdates:
                         if hasattr(exdate, 'dt'):
+                            # Single datetime
                             exdate_dt = exdate.dt
                             if hasattr(exdate_dt, 'tzinfo') and exdate_dt.tzinfo:
                                 exdate_dt = exdate_dt.replace(tzinfo=None)
                             exdate_list.append(exdate_dt)
+                            app.logger.info(f"Parsed EXDATE (single): {exdate_dt}")
                         elif hasattr(exdate, 'dts'):
                             # Multiple dates in single EXDATE property
+                            app.logger.info(f"Found EXDATE with multiple dates: {len(exdate.dts)} dates")
                             for dt in exdate.dts:
-                                if hasattr(dt.dt, 'tzinfo') and dt.dt.tzinfo:
-                                    dt.dt = dt.dt.replace(tzinfo=None)
-                                exdate_list.append(dt.dt)
+                                if hasattr(dt, 'dt'):
+                                    exdate_dt = dt.dt
+                                    if hasattr(exdate_dt, 'tzinfo') and exdate_dt.tzinfo:
+                                        exdate_dt = exdate_dt.replace(tzinfo=None)
+                                    exdate_list.append(exdate_dt)
+                                    app.logger.info(f"Parsed EXDATE (from dts): {exdate_dt}")
+                        elif hasattr(exdate, 'to_ical'):
+                            # Try to parse from ical string
+                            try:
+                                ical_str = exdate.to_ical().decode('utf-8')
+                                app.logger.info(f"Parsing EXDATE from ical string: {ical_str}")
+                                # Split comma-separated dates
+                                for date_str in ical_str.split(','):
+                                    parsed_date = self._parse_date(date_str.strip())
+                                    if parsed_date:
+                                        exdate_list.append(parsed_date)
+                                        app.logger.info(f"Parsed EXDATE (from ical): {parsed_date}")
+                            except Exception as e2:
+                                app.logger.warning(f"Failed to parse EXDATE ical string: {e2}")
+                        else:
+                            # Try direct conversion
+                            try:
+                                if isinstance(exdate, (datetime, date)):
+                                    exdate_list.append(exdate)
+                                    app.logger.info(f"Parsed EXDATE (direct): {exdate}")
+                                else:
+                                    app.logger.warning(f"Unknown EXDATE format: {type(exdate)} - {exdate}")
+                            except Exception as e3:
+                                app.logger.warning(f"Failed to parse EXDATE directly: {e3}")
                     
                     event_data['exdates'] = exdate_list
-                    app.logger.info(f"Found {len(exdate_list)} EXDATE entries for event: {summary}")
+                    app.logger.info(f"Final EXDATE list for {summary}: {[str(ed) for ed in exdate_list]}")
                     
                 except Exception as e:
-                    app.logger.warning(f"Error parsing EXDATE for event {summary}: {e}")
+                    app.logger.error(f"Error parsing EXDATE for event {summary}: {e}")
+                    app.logger.error(f"EXDATE raw data: {exdates}")
+                    app.logger.error(f"EXDATE type: {type(exdates)}")
             
             return event_data
             
