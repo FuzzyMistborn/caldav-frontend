@@ -792,7 +792,8 @@ class CalDAVClient:
                 'url': str(event_url),
                 'start': start_dt,
                 'end': end_dt,
-                'rrule': None
+                'rrule': None,
+                'exdates': []
             }
             
             # Simple RRULE handling
@@ -806,6 +807,34 @@ class CalDAVClient:
                     event_data['rrule'] = rrule_str
                 except:
                     pass
+            
+            # Extract EXDATE entries
+            exdates = component.get('exdate')
+            if exdates:
+                exdate_list = []
+                try:
+                    # EXDATE can be a single entry or a list
+                    if not isinstance(exdates, list):
+                        exdates = [exdates]
+                    
+                    for exdate in exdates:
+                        if hasattr(exdate, 'dt'):
+                            exdate_dt = exdate.dt
+                            if hasattr(exdate_dt, 'tzinfo') and exdate_dt.tzinfo:
+                                exdate_dt = exdate_dt.replace(tzinfo=None)
+                            exdate_list.append(exdate_dt)
+                        elif hasattr(exdate, 'dts'):
+                            # Multiple dates in single EXDATE property
+                            for dt in exdate.dts:
+                                if hasattr(dt.dt, 'tzinfo') and dt.dt.tzinfo:
+                                    dt.dt = dt.dt.replace(tzinfo=None)
+                                exdate_list.append(dt.dt)
+                    
+                    event_data['exdates'] = exdate_list
+                    app.logger.info(f"Found {len(exdate_list)} EXDATE entries for event: {summary}")
+                    
+                except Exception as e:
+                    app.logger.warning(f"Error parsing EXDATE for event {summary}: {e}")
             
             return event_data
             
@@ -839,6 +868,10 @@ class CalDAVClient:
             if until_str:
                 until_date = self._parse_date(until_str)
             
+            # Get EXDATE list from base event if it exists
+            exdates = base_event.get('exdates', [])
+            app.logger.info(f"Found {len(exdates)} EXDATE entries for recurring event: {base_event['summary']}")
+            
             # Calculate event duration
             duration = base_event['end'] - base_event['start']
             
@@ -867,9 +900,28 @@ class CalDAVClient:
                 
                 event_end = current_date + duration
                 
-                # Check if this occurrence overlaps with query range
-                if (current_date.date() <= end_date.date() and 
-                    event_end.date() >= start_date.date()):
+                # Check if this occurrence should be excluded by EXDATE
+                is_excluded = False
+                for exdate in exdates:
+                    # Compare dates, handling both datetime and date objects
+                    if hasattr(exdate, 'date'):
+                        exdate_date = exdate.date()
+                    else:
+                        exdate_date = exdate
+                    
+                    if hasattr(current_date, 'date'):
+                        current_date_date = current_date.date()
+                    else:
+                        current_date_date = current_date
+                    
+                    if exdate_date == current_date_date:
+                        is_excluded = True
+                        app.logger.info(f"Excluding occurrence on {current_date_date} due to EXDATE")
+                        break
+                
+                # Only add if not excluded and within date range
+                if not is_excluded and (current_date.date() <= end_date.date() and 
+                                       event_end.date() >= start_date.date()):
                     
                     event_copy = base_event.copy()
                     event_copy['start'] = current_date
@@ -914,6 +966,7 @@ class CalDAVClient:
                 if occurrence_count > 1000:
                     break
             
+            app.logger.info(f"Expanded recurring event '{base_event['summary']}' into {len(events)} occurrences (excluded {len(exdates)} via EXDATE)")
             return events
             
         except Exception as e:
