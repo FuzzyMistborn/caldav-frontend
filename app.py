@@ -405,6 +405,95 @@ class CalDAVClient:
         except Exception as e:
             app.logger.error(f"Error finding event by UID: {e}")
             return None
+
+    def is_occurrence_already_excluded(self, original_uid, event_date):
+        """Check if a specific occurrence is already excluded by EXDATE"""
+        try:
+            app.logger.info(f"Checking if occurrence {event_date} of {original_uid} is already excluded")
+            
+            # Find the original recurring event
+            original_event = self._find_event_by_uid(original_uid)
+            if not original_event:
+                app.logger.warning(f"Could not find original event with UID: {original_uid}")
+                return False
+            
+            # Load the event data
+            if not hasattr(original_event, 'data') or not original_event.data:
+                try:
+                    original_event.load()
+                except Exception as e:
+                    app.logger.error(f"Failed to load event data: {e}")
+                    return False
+            
+            # Parse event data
+            cal = Calendar.from_ical(original_event.data)
+            
+            # Check for EXDATE entries
+            for component in cal.walk():
+                if component.name == "VEVENT":
+                    exdates = component.get('exdate')
+                    if exdates:
+                        # Parse the event date we're checking
+                        if 'T' in event_date:
+                            check_datetime = datetime.fromisoformat(event_date.replace('Z', ''))
+                        else:
+                            check_datetime = datetime.fromisoformat(event_date)
+                        
+                        # Convert EXDATE to list if it's not already
+                        if not isinstance(exdates, list):
+                            exdates = [exdates]
+                        
+                        for exdate in exdates:
+                            if hasattr(exdate, 'dt'):
+                                exdate_dt = exdate.dt
+                                if hasattr(exdate_dt, 'tzinfo') and exdate_dt.tzinfo:
+                                    exdate_dt = exdate_dt.replace(tzinfo=None)
+                            elif hasattr(exdate, 'dts'):
+                                # Multiple dates in single EXDATE property
+                                for dt in exdate.dts:
+                                    exdate_dt = dt.dt
+                                    if hasattr(exdate_dt, 'tzinfo') and exdate_dt.tzinfo:
+                                        exdate_dt = exdate_dt.replace(tzinfo=None)
+                                    
+                                    # Compare dates
+                                    if hasattr(exdate_dt, 'date'):
+                                        exdate_date = exdate_dt.date()
+                                    else:
+                                        exdate_date = exdate_dt
+                                    
+                                    if hasattr(check_datetime, 'date'):
+                                        check_date = check_datetime.date()
+                                    else:
+                                        check_date = check_datetime
+                                    
+                                    if exdate_date == check_date:
+                                        app.logger.info(f"Occurrence {event_date} is already excluded by EXDATE")
+                                        return True
+                                continue
+                            
+                            # Compare dates
+                            if hasattr(exdate_dt, 'date'):
+                                exdate_date = exdate_dt.date()
+                            else:
+                                exdate_date = exdate_dt
+                            
+                            if hasattr(check_datetime, 'date'):
+                                check_date = check_datetime.date()
+                            else:
+                                check_date = check_datetime
+                            
+                            if exdate_date == check_date:
+                                app.logger.info(f"Occurrence {event_date} is already excluded by EXDATE")
+                                return True
+                    
+                    break
+            
+            app.logger.info(f"Occurrence {event_date} is not excluded")
+            return False
+            
+        except Exception as e:
+            app.logger.error(f"Error checking if occurrence is excluded: {e}")
+            return False
     
     def get_calendars(self):
         """Get list of available calendars"""
