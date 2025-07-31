@@ -145,7 +145,10 @@ class CalDAVClient:
     def delete_recurring_occurrence(self, event_url, original_uid, event_date):
         """Delete only a specific occurrence of a recurring event by adding EXDATE"""
         try:
-            app.logger.info(f"Deleting recurring occurrence: {original_uid} on {event_date}")
+            app.logger.info(f"=== DELETING RECURRING OCCURRENCE ===")
+            app.logger.info(f"Original UID: {original_uid}")
+            app.logger.info(f"Event date: {event_date}")
+            app.logger.info(f"Event URL: {event_url}")
             
             # Find the original recurring event
             original_event = self._find_event_by_uid(original_uid)
@@ -153,17 +156,33 @@ class CalDAVClient:
                 app.logger.error(f"Could not find original event with UID: {original_uid}")
                 return False
             
+            app.logger.info(f"Found original event at URL: {original_event.url}")
+            
+            # Load the event data
+            if not hasattr(original_event, 'data') or not original_event.data:
+                try:
+                    original_event.load()
+                except Exception as e:
+                    app.logger.error(f"Failed to load event data: {e}")
+                    return False
+            
             # Parse event data
             cal = Calendar.from_ical(original_event.data)
+            app.logger.info("Successfully parsed iCalendar data")
             
             # Add EXDATE to exclude this occurrence
+            modified = False
             for component in cal.walk():
                 if component.name == "VEVENT":
+                    app.logger.info("Found VEVENT component")
+                    
                     # Parse the exception date
                     if 'T' in event_date:
                         exception_datetime = datetime.fromisoformat(event_date.replace('Z', ''))
                     else:
                         exception_datetime = datetime.fromisoformat(event_date)
+                    
+                    app.logger.info(f"Exception datetime: {exception_datetime}")
                     
                     # Get original DTSTART to match format
                     dtstart = component.get('dtstart')
@@ -174,9 +193,11 @@ class CalDAVClient:
                                 exception_datetime.date(), 
                                 dtstart.dt.time()
                             )
+                            app.logger.info(f"Adjusted exception datetime to match DTSTART time: {exception_datetime}")
                         else:
                             # Date only
                             exception_datetime = exception_datetime.date()
+                            app.logger.info(f"Using date-only exception: {exception_datetime}")
                     
                     # Add EXDATE
                     if 'exdate' in component:
@@ -185,20 +206,86 @@ class CalDAVClient:
                             existing_exdates = [existing_exdates]
                         existing_exdates.append(exception_datetime)
                         component['exdate'] = existing_exdates
+                        app.logger.info(f"Added to existing EXDATE list: {existing_exdates}")
                     else:
                         component.add('exdate', exception_datetime)
+                        app.logger.info(f"Added new EXDATE: {exception_datetime}")
                     
-                    app.logger.info(f"Added EXDATE: {exception_datetime}")
+                    modified = True
                     break
             
+            if not modified:
+                app.logger.error("No VEVENT component found to modify")
+                return False
+            
             # Save modified event
-            original_event.data = cal.to_ical()
-            original_event.save()
-            app.logger.info("Recurring occurrence deleted successfully")
-            return True
+            try:
+                original_event.data = cal.to_ical()
+                original_event.save()
+                app.logger.info("Successfully saved modified event with EXDATE")
+                app.logger.info("=== RECURRING OCCURRENCE DELETION COMPLETE ===")
+                return True
+            except Exception as e:
+                app.logger.error(f"Failed to save modified event: {e}")
+                return False
                 
         except Exception as e:
             app.logger.error(f"Error deleting recurring occurrence: {e}")
+            app.logger.error(f"Traceback: {traceback.format_exc()}")
+            return False
+
+    def update_event(self, event_url, summary, description, location, start_dt, end_dt, rrule=None):
+        """Update an existing event"""
+        try:
+            app.logger.info(f"Updating event at URL: {event_url}")
+            
+            # Find the event
+            event = self.calendar.event_by_url(event_url)
+            
+            # Parse current event data
+            cal = Calendar.from_ical(event.data)
+            
+            # Update the VEVENT component
+            for component in cal.walk():
+                if component.name == "VEVENT":
+                    # Update basic properties
+                    component['summary'] = summary
+                    component['description'] = description
+                    
+                    if location:
+                        component['location'] = location
+                    elif 'location' in component:
+                        del component['location']
+                    
+                    # Ensure timezone-naive datetimes
+                    if hasattr(start_dt, 'tzinfo') and start_dt.tzinfo:
+                        start_dt = start_dt.replace(tzinfo=None)
+                    if hasattr(end_dt, 'tzinfo') and end_dt.tzinfo:
+                        end_dt = end_dt.replace(tzinfo=None)
+                    
+                    component['dtstart'] = start_dt
+                    component['dtend'] = end_dt
+                    component['dtstamp'] = datetime.now(pytz.UTC).replace(tzinfo=None)
+                    
+                    # Handle recurrence rule
+                    if rrule:
+                        rrule_dict = self._parse_rrule_string(rrule)
+                        if rrule_dict:
+                            recur = vRecur(rrule_dict)
+                            component['rrule'] = recur
+                    elif 'rrule' in component:
+                        del component['rrule']
+                    
+                    break
+            
+            # Save updated event
+            event.data = cal.to_ical()
+            event.save()
+            app.logger.info("Event updated successfully")
+            return True
+                
+        except Exception as e:
+            app.logger.error(f"Error updating event: {e}")
             return False
 
     def delete_recurring_future(self, event_url, original_uid, event_date):
