@@ -16,6 +16,7 @@ import caldav
 from caldav.lib import error
 import pytz
 from icalendar import Calendar, Event as ICalEvent, vRecur
+from icalendar.prop import vDatetime
 import uuid
 from dotenv import load_dotenv
 from urllib.parse import unquote
@@ -202,11 +203,23 @@ class CalDAVClient:
                     # Add EXDATE
                     if 'exdate' in component:
                         existing_exdates = component['exdate']
-                        if not isinstance(existing_exdates, list):
-                            existing_exdates = [existing_exdates]
-                        existing_exdates.append(exception_datetime)
-                        component['exdate'] = existing_exdates
-                        app.logger.info(f"Added to existing EXDATE list: {existing_exdates}")
+                        app.logger.info(f"Found existing EXDATE: {existing_exdates} (type: {type(existing_exdates)})")
+                        
+                        # Handle different EXDATE formats
+                        if hasattr(existing_exdates, 'dts'):
+                            # It's a vDDDLists object - add to the list
+                            existing_exdates.dts.append(vDatetime(exception_datetime))
+                            app.logger.info(f"Added to existing vDDDLists: {len(existing_exdates.dts)} total dates")
+                        elif isinstance(existing_exdates, list):
+                            # It's already a list
+                            existing_exdates.append(exception_datetime)
+                            component['exdate'] = existing_exdates
+                            app.logger.info(f"Added to existing list: {existing_exdates}")
+                        else:
+                            # Create a new list with both dates
+                            new_exdates = [existing_exdates, exception_datetime]
+                            component['exdate'] = new_exdates
+                            app.logger.info(f"Created new EXDATE list: {new_exdates}")
                     else:
                         component.add('exdate', exception_datetime)
                         app.logger.info(f"Added new EXDATE: {exception_datetime}")
@@ -902,51 +915,72 @@ class CalDAVClient:
             if exdates:
                 exdate_list = []
                 try:
-                    # EXDATE can be a single entry or a list
-                    if not isinstance(exdates, list):
-                        exdates = [exdates]
+                    app.logger.info(f"Raw EXDATE data: {exdates} (type: {type(exdates)})")
                     
-                    for exdate in exdates:
-                        if hasattr(exdate, 'dt'):
-                            # Single datetime
-                            exdate_dt = exdate.dt
-                            if hasattr(exdate_dt, 'tzinfo') and exdate_dt.tzinfo:
-                                exdate_dt = exdate_dt.replace(tzinfo=None)
-                            exdate_list.append(exdate_dt)
-                            app.logger.info(f"Parsed EXDATE (single): {exdate_dt}")
-                        elif hasattr(exdate, 'dts'):
-                            # Multiple dates in single EXDATE property
-                            app.logger.info(f"Found EXDATE with multiple dates: {len(exdate.dts)} dates")
-                            for dt in exdate.dts:
-                                if hasattr(dt, 'dt'):
-                                    exdate_dt = dt.dt
-                                    if hasattr(exdate_dt, 'tzinfo') and exdate_dt.tzinfo:
-                                        exdate_dt = exdate_dt.replace(tzinfo=None)
-                                    exdate_list.append(exdate_dt)
-                                    app.logger.info(f"Parsed EXDATE (from dts): {exdate_dt}")
-                        elif hasattr(exdate, 'to_ical'):
-                            # Try to parse from ical string
-                            try:
-                                ical_str = exdate.to_ical().decode('utf-8')
+                    # Handle different EXDATE storage formats
+                    if hasattr(exdates, 'dts'):
+                        # Multiple dates in a single vDDDLists object
+                        app.logger.info(f"Found EXDATE with vDDDLists: {len(exdates.dts)} dates")
+                        for dt in exdates.dts:
+                            if hasattr(dt, 'dt'):
+                                exdate_dt = dt.dt
+                                if hasattr(exdate_dt, 'tzinfo') and exdate_dt.tzinfo:
+                                    exdate_dt = exdate_dt.replace(tzinfo=None)
+                                exdate_list.append(exdate_dt)
+                                app.logger.info(f"Parsed EXDATE (from vDDDLists): {exdate_dt}")
+                    elif hasattr(exdates, 'dt'):
+                        # Single datetime
+                        exdate_dt = exdates.dt
+                        if hasattr(exdate_dt, 'tzinfo') and exdate_dt.tzinfo:
+                            exdate_dt = exdate_dt.replace(tzinfo=None)
+                        exdate_list.append(exdate_dt)
+                        app.logger.info(f"Parsed EXDATE (single): {exdate_dt}")
+                    elif isinstance(exdates, list):
+                        # List of EXDATE entries
+                        app.logger.info(f"Found EXDATE list with {len(exdates)} entries")
+                        for exdate in exdates:
+                            if hasattr(exdate, 'dt'):
+                                exdate_dt = exdate.dt
+                                if hasattr(exdate_dt, 'tzinfo') and exdate_dt.tzinfo:
+                                    exdate_dt = exdate_dt.replace(tzinfo=None)
+                                exdate_list.append(exdate_dt)
+                                app.logger.info(f"Parsed EXDATE (from list): {exdate_dt}")
+                            elif hasattr(exdate, 'dts'):
+                                for dt in exdate.dts:
+                                    if hasattr(dt, 'dt'):
+                                        exdate_dt = dt.dt
+                                        if hasattr(exdate_dt, 'tzinfo') and exdate_dt.tzinfo:
+                                            exdate_dt = exdate_dt.replace(tzinfo=None)
+                                        exdate_list.append(exdate_dt)
+                                        app.logger.info(f"Parsed EXDATE (from list->dts): {exdate_dt}")
+                    else:
+                        # Try direct conversion or ical parsing
+                        try:
+                            if isinstance(exdates, (datetime, date)):
+                                exdate_list.append(exdates)
+                                app.logger.info(f"Parsed EXDATE (direct): {exdates}")
+                            elif hasattr(exdates, 'to_ical'):
+                                ical_str = exdates.to_ical().decode('utf-8')
                                 app.logger.info(f"Parsing EXDATE from ical string: {ical_str}")
-                                # Split comma-separated dates
                                 for date_str in ical_str.split(','):
                                     parsed_date = self._parse_date(date_str.strip())
                                     if parsed_date:
                                         exdate_list.append(parsed_date)
                                         app.logger.info(f"Parsed EXDATE (from ical): {parsed_date}")
-                            except Exception as e2:
-                                app.logger.warning(f"Failed to parse EXDATE ical string: {e2}")
-                        else:
-                            # Try direct conversion
-                            try:
-                                if isinstance(exdate, (datetime, date)):
-                                    exdate_list.append(exdate)
-                                    app.logger.info(f"Parsed EXDATE (direct): {exdate}")
-                                else:
-                                    app.logger.warning(f"Unknown EXDATE format: {type(exdate)} - {exdate}")
-                            except Exception as e3:
-                                app.logger.warning(f"Failed to parse EXDATE directly: {e3}")
+                        except Exception as e2:
+                            app.logger.warning(f"Failed to parse EXDATE: {e2}")
+                    
+                    # Also check for multiple EXDATE properties in the component
+                    all_exdates = component.property_items('EXDATE')
+                    if len(all_exdates) > 1:
+                        app.logger.info(f"Found {len(all_exdates)} separate EXDATE properties")
+                        for prop_name, prop_value in all_exdates:
+                            if hasattr(prop_value, 'dt') and prop_value.dt not in exdate_list:
+                                exdate_dt = prop_value.dt
+                                if hasattr(exdate_dt, 'tzinfo') and exdate_dt.tzinfo:
+                                    exdate_dt = exdate_dt.replace(tzinfo=None)
+                                exdate_list.append(exdate_dt)
+                                app.logger.info(f"Parsed EXDATE (from property_items): {exdate_dt}")
                     
                     event_data['exdates'] = exdate_list
                     app.logger.info(f"Final EXDATE list for {summary}: {[str(ed) for ed in exdate_list]}")
@@ -955,6 +989,8 @@ class CalDAVClient:
                     app.logger.error(f"Error parsing EXDATE for event {summary}: {e}")
                     app.logger.error(f"EXDATE raw data: {exdates}")
                     app.logger.error(f"EXDATE type: {type(exdates)}")
+                    import traceback
+                    app.logger.error(f"Traceback: {traceback.format_exc()}")
             
             return event_data
             
