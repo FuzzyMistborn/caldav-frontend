@@ -1417,13 +1417,25 @@ def api_update_event(event_id):
         app.logger.error(f"Exception during event update: {e}")
         return jsonify({'error': f'Error updating event: {str(e)}'}), 500
 
+@app.route('/debug/test-delete/<path:event_id>', methods=['GET'])
+def test_delete_route(event_id):
+    """Test endpoint to verify delete route is working"""
+    return jsonify({
+        'message': f'Delete route is working for event_id: {event_id}',
+        'decoded_id': unquote(event_id)
+    })
+
 @app.route('/api/events/<path:event_id>', methods=['DELETE'])
 def api_delete_event(event_id):
     """API endpoint to delete event with recurring options support"""
     event_id = unquote(event_id)
+    app.logger.info(f"=== DELETE REQUEST RECEIVED ===")
     app.logger.info(f"Delete request for event ID: {event_id}")
+    app.logger.info(f"Request method: {request.method}")
+    app.logger.info(f"Request headers: {dict(request.headers)}")
     
     if 'username' not in session:
+        app.logger.error("Not authenticated")
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Extract calendar name from event ID
