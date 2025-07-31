@@ -951,7 +951,7 @@ class CalDAVClient:
                 except:
                     pass
             
-            # Extract EXDATE entries
+            # Extract EXDATE entries - FIXED VERSION
             exdates = component.get('exdate')
             if exdates:
                 exdate_list = []
@@ -1011,17 +1011,9 @@ class CalDAVClient:
                         except Exception as e2:
                             app.logger.warning(f"Failed to parse EXDATE: {e2}")
                     
-                    # Also check for multiple EXDATE properties in the component
-                    all_exdates = component.property_items('EXDATE')
-                    if len(all_exdates) > 1:
-                        app.logger.info(f"Found {len(all_exdates)} separate EXDATE properties")
-                        for prop_name, prop_value in all_exdates:
-                            if hasattr(prop_value, 'dt') and prop_value.dt not in exdate_list:
-                                exdate_dt = prop_value.dt
-                                if hasattr(exdate_dt, 'tzinfo') and exdate_dt.tzinfo:
-                                    exdate_dt = exdate_dt.replace(tzinfo=None)
-                                exdate_list.append(exdate_dt)
-                                app.logger.info(f"Parsed EXDATE (from property_items): {exdate_dt}")
+                    # REMOVED: The problematic multiple EXDATE properties check
+                    # This was causing the contamination by pulling in old/invalid EXDATE entries
+                    # The component.get('exdate') above should handle all valid EXDATE entries
                     
                     event_data['exdates'] = exdate_list
                     app.logger.info(f"Final EXDATE list for {summary}: {[str(ed) for ed in exdate_list]}")
