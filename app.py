@@ -2,7 +2,6 @@
 """
 CalDAV Web Client for Nextcloud
 A Flask-based web application for managing calendar events via CalDAV
-Complete version with recurring events and enhanced debugging features
 """
 
 import os
@@ -26,8 +25,9 @@ import traceback
 load_dotenv()
 
 # Configure logging
+log_level = os.environ.get('LOG_LEVEL', 'info').upper()
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, log_level),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[logging.StreamHandler(sys.stdout)]
 )
@@ -70,7 +70,7 @@ class CalDAVClient:
                 password=self.password
             )
             self.principal = self.client.principal()
-            app.logger.info(f"Successfully connected to CalDAV server: {self.base_url}")
+            app.logger.info(f"Successfully connected to CalDAV server")
             return True
         except Exception as e:
             app.logger.error(f"CalDAV connection error: {e}")
@@ -83,18 +83,13 @@ class CalDAVClient:
                 app.logger.error("No calendar selected")
                 return False
             
-            app.logger.info(f"Searching for event to delete with UID: {uid}")
-            
             # Clean the UID (remove recurrence suffix if present)
             clean_uid = uid.split('_recurrence_')[0] if '_recurrence_' in uid else uid
-            app.logger.info(f"Cleaned UID: {clean_uid}")
             
             all_objects = list(self.calendar.objects())
-            app.logger.info(f"Searching through {len(all_objects)} objects")
             
-            for i, obj in enumerate(all_objects):
+            for obj in all_objects:
                 try:
-                    # Try to load the object data
                     raw_data = None
                     
                     if hasattr(obj, 'data') and obj.data:
@@ -111,13 +106,11 @@ class CalDAVClient:
                         raw_data = raw_data.decode('utf-8', errors='ignore')
                     
                     if isinstance(raw_data, str) and f'UID:{clean_uid}' in raw_data:
-                        app.logger.info(f"Found event with UID: {clean_uid}")
                         obj.delete()
                         app.logger.info("Event deleted successfully")
                         return True
                         
                 except Exception as e:
-                    app.logger.warning(f"Error checking object {i+1}: {e}")
                     continue
             
             app.logger.warning(f"Event not found with UID: {clean_uid}")
@@ -127,37 +120,14 @@ class CalDAVClient:
             app.logger.error(f"Error deleting event by UID: {e}")
             return False
 
-    def delete_event(self, event_url):
-        """Delete a complete event by URL"""
-        try:
-            if not self.calendar:
-                app.logger.error("No calendar selected")
-                return False
-            
-            event = self.calendar.event_by_url(event_url)
-            event.delete()
-            app.logger.info("Event deleted successfully")
-            return True
-                
-        except Exception as e:
-            app.logger.error(f"Error deleting event: {e}")
-            return False
-
     def delete_recurring_occurrence(self, event_url, original_uid, event_date):
         """Delete only a specific occurrence of a recurring event by adding EXDATE"""
         try:
-            app.logger.info(f"=== DELETING RECURRING OCCURRENCE ===")
-            app.logger.info(f"Original UID: {original_uid}")
-            app.logger.info(f"Event date: {event_date}")
-            app.logger.info(f"Event URL: {event_url}")
-            
             # Find the original recurring event
             original_event = self._find_event_by_uid(original_uid)
             if not original_event:
                 app.logger.error(f"Could not find original event with UID: {original_uid}")
                 return False
-            
-            app.logger.info(f"Found original event at URL: {original_event.url}")
             
             # Load the event data
             if not hasattr(original_event, 'data') or not original_event.data:
@@ -169,21 +139,16 @@ class CalDAVClient:
             
             # Parse event data
             cal = Calendar.from_ical(original_event.data)
-            app.logger.info("Successfully parsed iCalendar data")
             
             # Add EXDATE to exclude this occurrence
             modified = False
             for component in cal.walk():
                 if component.name == "VEVENT":
-                    app.logger.info("Found VEVENT component")
-                    
                     # Parse the exception date
                     if 'T' in event_date:
                         exception_datetime = datetime.fromisoformat(event_date.replace('Z', ''))
                     else:
                         exception_datetime = datetime.fromisoformat(event_date)
-                    
-                    app.logger.info(f"Exception datetime: {exception_datetime}")
                     
                     # Get original DTSTART to match format
                     dtstart = component.get('dtstart')
@@ -194,17 +159,14 @@ class CalDAVClient:
                                 exception_datetime.date(), 
                                 dtstart.dt.time()
                             )
-                            app.logger.info(f"Adjusted exception datetime to match DTSTART time: {exception_datetime}")
                         else:
                             # Date only
                             exception_datetime = exception_datetime.date()
-                            app.logger.info(f"Using date-only exception: {exception_datetime}")
                     
                     # Check if this date is already excluded
                     existing_exdates = []
                     if 'exdate' in component:
                         existing_exdate = component['exdate']
-                        app.logger.info(f"Found existing EXDATE: {existing_exdate} (type: {type(existing_exdate)})")
                         
                         # Handle different EXDATE formats and collect all existing dates
                         if hasattr(existing_exdate, 'dts'):
@@ -215,7 +177,6 @@ class CalDAVClient:
                                     if hasattr(existing_date, 'tzinfo') and existing_date.tzinfo:
                                         existing_date = existing_date.replace(tzinfo=None)
                                     existing_exdates.append(existing_date)
-                                    app.logger.info(f"Found existing EXDATE: {existing_date}")
                         elif isinstance(existing_exdate, list):
                             # It's already a list
                             for ex in existing_exdate:
@@ -224,7 +185,6 @@ class CalDAVClient:
                                     if hasattr(existing_date, 'tzinfo') and existing_date.tzinfo:
                                         existing_date = existing_date.replace(tzinfo=None)
                                     existing_exdates.append(existing_date)
-                                    app.logger.info(f"Found existing EXDATE from list: {existing_date}")
                         else:
                             # Single existing EXDATE
                             if hasattr(existing_exdate, 'dt'):
@@ -232,7 +192,6 @@ class CalDAVClient:
                                 if hasattr(existing_date, 'tzinfo') and existing_date.tzinfo:
                                     existing_date = existing_date.replace(tzinfo=None)
                                 existing_exdates.append(existing_date)
-                                app.logger.info(f"Found single existing EXDATE: {existing_date}")
                     
                     # Check if our target date is already in the EXDATE list
                     already_exists = False
@@ -240,11 +199,9 @@ class CalDAVClient:
                         if hasattr(existing_date, 'date') and hasattr(exception_datetime, 'date'):
                             if existing_date.date() == exception_datetime.date():
                                 already_exists = True
-                                app.logger.info(f"EXDATE {exception_datetime} already exists, skipping")
                                 break
                         elif existing_date == exception_datetime:
                             already_exists = True
-                            app.logger.info(f"EXDATE {exception_datetime} already exists, skipping")
                             break
                     
                     if already_exists:
@@ -263,7 +220,6 @@ class CalDAVClient:
                     
                     # Replace the EXDATE property completely
                     component['exdate'] = new_exdate_list
-                    app.logger.info(f"Created new EXDATE list with {len(new_exdate_list.dts)} dates")
                     
                     modified = True
                     break
@@ -277,7 +233,6 @@ class CalDAVClient:
                 original_event.data = cal.to_ical()
                 original_event.save()
                 app.logger.info("Successfully saved modified event with EXDATE")
-                app.logger.info("=== RECURRING OCCURRENCE DELETION COMPLETE ===")
                 return True
             except Exception as e:
                 app.logger.error(f"Failed to save modified event: {e}")
@@ -285,68 +240,11 @@ class CalDAVClient:
                 
         except Exception as e:
             app.logger.error(f"Error deleting recurring occurrence: {e}")
-            app.logger.error(f"Traceback: {traceback.format_exc()}")
-            return False
-
-    def update_event(self, event_url, summary, description, location, start_dt, end_dt, rrule=None):
-        """Update an existing event"""
-        try:
-            app.logger.info(f"Updating event at URL: {event_url}")
-            
-            # Find the event
-            event = self.calendar.event_by_url(event_url)
-            
-            # Parse current event data
-            cal = Calendar.from_ical(event.data)
-            
-            # Update the VEVENT component
-            for component in cal.walk():
-                if component.name == "VEVENT":
-                    # Update basic properties
-                    component['summary'] = summary
-                    component['description'] = description
-                    
-                    if location:
-                        component['location'] = location
-                    elif 'location' in component:
-                        del component['location']
-                    
-                    # Ensure timezone-naive datetimes
-                    if hasattr(start_dt, 'tzinfo') and start_dt.tzinfo:
-                        start_dt = start_dt.replace(tzinfo=None)
-                    if hasattr(end_dt, 'tzinfo') and end_dt.tzinfo:
-                        end_dt = end_dt.replace(tzinfo=None)
-                    
-                    component['dtstart'] = start_dt
-                    component['dtend'] = end_dt
-                    component['dtstamp'] = datetime.now(pytz.UTC).replace(tzinfo=None)
-                    
-                    # Handle recurrence rule
-                    if rrule:
-                        rrule_dict = self._parse_rrule_string(rrule)
-                        if rrule_dict:
-                            recur = vRecur(rrule_dict)
-                            component['rrule'] = recur
-                    elif 'rrule' in component:
-                        del component['rrule']
-                    
-                    break
-            
-            # Save updated event
-            event.data = cal.to_ical()
-            event.save()
-            app.logger.info("Event updated successfully")
-            return True
-                
-        except Exception as e:
-            app.logger.error(f"Error updating event: {e}")
             return False
 
     def delete_recurring_future(self, event_url, original_uid, event_date):
         """Delete this occurrence and all future occurrences by modifying RRULE"""
         try:
-            app.logger.info(f"Deleting future recurring events: {original_uid} from {event_date}")
-            
             # Find the original recurring event
             original_event = self._find_event_by_uid(original_uid)
             if not original_event:
@@ -380,7 +278,6 @@ class CalDAVClient:
                         # Update the component
                         new_recur = vRecur(rrule_dict)
                         component['rrule'] = new_recur
-                        app.logger.info(f"Modified RRULE UNTIL: {until_date}")
                     else:
                         # No RRULE found, treat as single event deletion
                         return self.delete_event_by_uid(original_uid)
@@ -399,8 +296,6 @@ class CalDAVClient:
     def delete_recurring_series(self, original_uid):
         """Delete the entire recurring event series"""
         try:
-            app.logger.info(f"Deleting entire recurring series: {original_uid}")
-            
             # Find the original recurring event
             original_event = self._find_event_by_uid(original_uid)
             if not original_event:
@@ -424,13 +319,11 @@ class CalDAVClient:
             
             # Clean the UID (remove recurrence suffix if present)
             clean_uid = uid.split('_recurrence_')[0] if '_recurrence_' in uid else uid
-            app.logger.info(f"Searching for event with UID: {clean_uid}")
             
             all_objects = list(self.calendar.objects())
             
             for obj in all_objects:
                 try:
-                    # Try to load the object data
                     raw_data = None
                     
                     if hasattr(obj, 'data') and obj.data:
@@ -447,107 +340,16 @@ class CalDAVClient:
                         raw_data = raw_data.decode('utf-8', errors='ignore')
                     
                     if isinstance(raw_data, str) and f'UID:{clean_uid}' in raw_data:
-                        app.logger.info(f"Found event with UID: {clean_uid}")
                         return obj
                         
                 except Exception:
                     continue
             
-            app.logger.warning(f"Event not found with UID: {clean_uid}")
             return None
             
         except Exception as e:
             app.logger.error(f"Error finding event by UID: {e}")
             return None
-
-    def is_occurrence_already_excluded(self, original_uid, event_date):
-        """Check if a specific occurrence is already excluded by EXDATE"""
-        try:
-            app.logger.info(f"Checking if occurrence {event_date} of {original_uid} is already excluded")
-            
-            # Find the original recurring event
-            original_event = self._find_event_by_uid(original_uid)
-            if not original_event:
-                app.logger.warning(f"Could not find original event with UID: {original_uid}")
-                return False
-            
-            # Load the event data
-            if not hasattr(original_event, 'data') or not original_event.data:
-                try:
-                    original_event.load()
-                except Exception as e:
-                    app.logger.error(f"Failed to load event data: {e}")
-                    return False
-            
-            # Parse event data
-            cal = Calendar.from_ical(original_event.data)
-            
-            # Check for EXDATE entries
-            for component in cal.walk():
-                if component.name == "VEVENT":
-                    exdates = component.get('exdate')
-                    if exdates:
-                        # Parse the event date we're checking
-                        if 'T' in event_date:
-                            check_datetime = datetime.fromisoformat(event_date.replace('Z', ''))
-                        else:
-                            check_datetime = datetime.fromisoformat(event_date)
-                        
-                        # Convert EXDATE to list if it's not already
-                        if not isinstance(exdates, list):
-                            exdates = [exdates]
-                        
-                        for exdate in exdates:
-                            if hasattr(exdate, 'dt'):
-                                exdate_dt = exdate.dt
-                                if hasattr(exdate_dt, 'tzinfo') and exdate_dt.tzinfo:
-                                    exdate_dt = exdate_dt.replace(tzinfo=None)
-                            elif hasattr(exdate, 'dts'):
-                                # Multiple dates in single EXDATE property
-                                for dt in exdate.dts:
-                                    exdate_dt = dt.dt
-                                    if hasattr(exdate_dt, 'tzinfo') and exdate_dt.tzinfo:
-                                        exdate_dt = exdate_dt.replace(tzinfo=None)
-                                    
-                                    # Compare dates
-                                    if hasattr(exdate_dt, 'date'):
-                                        exdate_date = exdate_dt.date()
-                                    else:
-                                        exdate_date = exdate_dt
-                                    
-                                    if hasattr(check_datetime, 'date'):
-                                        check_date = check_datetime.date()
-                                    else:
-                                        check_date = check_datetime
-                                    
-                                    if exdate_date == check_date:
-                                        app.logger.info(f"Occurrence {event_date} is already excluded by EXDATE")
-                                        return True
-                                continue
-                            
-                            # Compare dates
-                            if hasattr(exdate_dt, 'date'):
-                                exdate_date = exdate_dt.date()
-                            else:
-                                exdate_date = exdate_dt
-                            
-                            if hasattr(check_datetime, 'date'):
-                                check_date = check_datetime.date()
-                            else:
-                                check_date = check_datetime
-                            
-                            if exdate_date == check_date:
-                                app.logger.info(f"Occurrence {event_date} is already excluded by EXDATE")
-                                return True
-                    
-                    break
-            
-            app.logger.info(f"Occurrence {event_date} is not excluded")
-            return False
-            
-        except Exception as e:
-            app.logger.error(f"Error checking if occurrence is excluded: {e}")
-            return False
     
     def get_calendars(self):
         """Get list of available calendars"""
@@ -564,7 +366,6 @@ class CalDAVClient:
                         display_name = 'Unnamed Calendar'
                 
                 calendar_list.append((display_name, str(cal.url)))
-                app.logger.info(f"Found calendar: {display_name} at {cal.url}")
             return calendar_list
         except Exception as e:
             app.logger.error(f"Error getting calendars: {e}")
@@ -585,180 +386,12 @@ class CalDAVClient:
                 
                 if display_name == calendar_name or cal.name == calendar_name:
                     self.calendar = cal
-                    app.logger.info(f"Selected calendar: {display_name}")
                     return True
             app.logger.warning(f"Calendar not found: {calendar_name}")
             return False
         except Exception as e:
             app.logger.error(f"Error selecting calendar: {e}")
             return False
-
-    def debug_raw_calendar_data(self):
-        """Enhanced debug method to inspect raw calendar data and parsing"""
-        if not self.calendar:
-            app.logger.error("No calendar selected for debugging")
-            return
-        
-        try:
-            app.logger.info(f"=== ENHANCED CALENDAR DEBUG: {self.calendar.name} ===")
-            app.logger.info(f"Calendar URL: {self.calendar.url}")
-            
-            # Get all objects in the calendar
-            all_objects = list(self.calendar.objects())
-            app.logger.info(f"Total objects found: {len(all_objects)}")
-            
-            if len(all_objects) == 0:
-                app.logger.warning("No objects found in calendar - calendar might be empty")
-                return
-            
-            # Inspect each object in detail
-            for i, obj in enumerate(all_objects):
-                try:
-                    app.logger.info(f"--- OBJECT {i+1} DETAILED ANALYSIS ---")
-                    app.logger.info(f"Object type: {type(obj)}")
-                    app.logger.info(f"Object URL: {getattr(obj, 'url', 'No URL')}")
-                    
-                    # Get raw data in multiple ways
-                    raw_data = None
-                    
-                    # Try different methods to get data
-                    data_methods = [
-                        ('obj.data', lambda: getattr(obj, 'data', None)),
-                        ('obj.load() then obj.data', lambda: self._try_load_then_data(obj)),
-                        ('obj.get_data()', lambda: obj.get_data() if hasattr(obj, 'get_data') else None),
-                        ('manual fetch', lambda: self._try_manual_fetch(obj)),
-                        ('str(obj)', lambda: str(obj) if obj else None)
-                    ]
-                    
-                    for method_name, method_func in data_methods:
-                        try:
-                            test_data = method_func()
-                            if test_data:
-                                app.logger.info(f"  {method_name} succeeded - length: {len(test_data) if test_data else 0}")
-                                if not raw_data:
-                                    raw_data = test_data
-                            else:
-                                app.logger.info(f"  {method_name} returned None/empty")
-                        except Exception as e:
-                            app.logger.warning(f"  {method_name} failed: {e}")
-                    
-                    if raw_data is None:
-                        app.logger.warning(f"Object {i+1}: No data available via any method")
-                        continue
-                    
-                    # Convert to string if needed
-                    if isinstance(raw_data, bytes):
-                        try:
-                            raw_data = raw_data.decode('utf-8')
-                            app.logger.info(f"  Decoded bytes to UTF-8 string")
-                        except UnicodeDecodeError as e:
-                            app.logger.error(f"  Failed to decode bytes: {e}")
-                            try:
-                                raw_data = raw_data.decode('latin1')
-                                app.logger.info(f"  Fallback: decoded bytes to latin1 string")
-                            except Exception as e2:
-                                app.logger.error(f"  Complete decode failure: {e2}")
-                                continue
-                    
-                    app.logger.info(f"Object {i+1} final data length: {len(raw_data)} characters")
-                    
-                    # Show first few lines for inspection
-                    lines = raw_data.split('\n')[:10]
-                    app.logger.info(f"Object {i+1} first 10 lines:")
-                    for line_num, line in enumerate(lines, 1):
-                        app.logger.info(f"  Line {line_num}: {repr(line)}")
-                    
-                    # Check for different component types
-                    component_types = ['VCALENDAR', 'VEVENT', 'VTODO', 'VJOURNAL', 'VFREEBUSY', 'VTIMEZONE']
-                    found_components = []
-                    for comp_type in component_types:
-                        if f'BEGIN:{comp_type}' in raw_data:
-                            found_components.append(comp_type)
-                    
-                    app.logger.info(f"Object {i+1} contains components: {found_components}")
-                    
-                    # If it contains VEVENT, try to parse it
-                    if 'BEGIN:VEVENT' in raw_data:
-                        app.logger.info(f"Object {i+1}: Attempting to parse VEVENT...")
-                        
-                        try:
-                            # Try parsing with icalendar
-                            from icalendar import Calendar as ICalendar
-                            cal = ICalendar.from_ical(raw_data)
-                            
-                            vevent_count = 0
-                            for component in cal.walk():
-                                if component.name == "VEVENT":
-                                    vevent_count += 1
-                                    app.logger.info(f"    VEVENT {vevent_count} found:")
-                                    
-                                    # Extract basic properties
-                                    summary = component.get('summary', 'No Summary')
-                                    uid = component.get('uid', 'No UID')
-                                    dtstart = component.get('dtstart')
-                                    dtend = component.get('dtend')
-                                    rrule = component.get('rrule')
-                                    
-                                    app.logger.info(f"      Summary: {summary}")
-                                    app.logger.info(f"      UID: {uid}")
-                                    app.logger.info(f"      DTSTART: {dtstart}")
-                                    app.logger.info(f"      DTEND: {dtend}")
-                                    app.logger.info(f"      RRULE: {rrule}")
-                                    
-                                    # Check for parsing issues
-                                    if dtstart:
-                                        try:
-                                            start_dt = dtstart.dt
-                                            app.logger.info(f"      Start datetime parsed: {start_dt} (type: {type(start_dt)})")
-                                        except Exception as e:
-                                            app.logger.error(f"      Failed to parse DTSTART: {e}")
-                                    
-                                    if dtend:
-                                        try:
-                                            end_dt = dtend.dt
-                                            app.logger.info(f"      End datetime parsed: {end_dt} (type: {type(end_dt)})")
-                                        except Exception as e:
-                                            app.logger.error(f"      Failed to parse DTEND: {e}")
-                            
-                            if vevent_count == 0:
-                                app.logger.warning(f"    No VEVENT components found after parsing!")
-                            else:
-                                app.logger.info(f"    Successfully parsed {vevent_count} VEVENT components")
-                                
-                        except Exception as parse_error:
-                            app.logger.error(f"    iCalendar parsing failed: {parse_error}")
-                            app.logger.error(f"    Raw data causing error (first 500 chars): {repr(raw_data[:500])}")
-                    
-                    else:
-                        app.logger.info(f"Object {i+1}: Does not contain VEVENT")
-                    
-                except Exception as obj_error:
-                    app.logger.error(f"Error analyzing object {i+1}: {obj_error}")
-                    app.logger.error(f"Traceback: {traceback.format_exc()}")
-            
-            app.logger.info("=== END ENHANCED CALENDAR DEBUG ===")
-            
-        except Exception as e:
-            app.logger.error(f"Error in debug_raw_calendar_data: {e}")
-            app.logger.error(f"Traceback: {traceback.format_exc()}")
-
-    def _try_load_then_data(self, obj):
-        """Helper method to try loading object then getting data"""
-        try:
-            obj.load()
-            return getattr(obj, 'data', None)
-        except:
-            return None
-
-    def _try_manual_fetch(self, obj):
-        """Helper method to try manual fetch of object data"""
-        try:
-            response = self.client.request(obj.url)
-            if response.status == 200:
-                return response.raw
-        except:
-            pass
-        return None
 
     def get_events(self, start_date, end_date):
         """Get events from calendar with recurring event expansion"""
@@ -767,70 +400,33 @@ class CalDAVClient:
             return []
         
         try:
-            app.logger.info(f"Getting events from {start_date} to {end_date}")
-            
             all_objects = list(self.calendar.objects())
-            app.logger.info(f"Found {len(all_objects)} objects in calendar")
-            
             event_list = []
             
             for i, obj in enumerate(all_objects):
                 try:
-                    app.logger.info(f"Processing object {i+1}: {obj.url}")
-                    
                     # Try multiple methods to get the actual iCalendar data
                     raw_data = None
                     
-                    # Method 1: Try obj.data
                     if hasattr(obj, 'data') and obj.data:
                         raw_data = obj.data
-                        app.logger.info(f"Object {i+1}: Got data via obj.data")
                     
-                    # Method 2: Try to load the data explicitly
                     if not raw_data:
                         try:
-                            obj.load()  # Explicitly load the object data
+                            obj.load()
                             if hasattr(obj, 'data') and obj.data:
                                 raw_data = obj.data
-                                app.logger.info(f"Object {i+1}: Got data after obj.load()")
-                        except Exception as e:
-                            app.logger.warning(f"Object {i+1}: obj.load() failed: {e}")
-                    
-                    # Method 3: Try get_data()
-                    if not raw_data and hasattr(obj, 'get_data'):
-                        try:
-                            raw_data = obj.get_data()
-                            if raw_data:
-                                app.logger.info(f"Object {i+1}: Got data via obj.get_data()")
-                        except Exception as e:
-                            app.logger.warning(f"Object {i+1}: get_data() failed: {e}")
-                    
-                    # Method 4: Try to fetch manually using the client
-                    if not raw_data:
-                        try:
-                            response = self.client.request(obj.url)
-                            if response.status == 200:
-                                raw_data = response.raw
-                                app.logger.info(f"Object {i+1}: Got data via manual fetch")
-                        except Exception as e:
-                            app.logger.warning(f"Object {i+1}: Manual fetch failed: {e}")
+                        except Exception:
+                            continue
                     
                     if not raw_data:
-                        app.logger.warning(f"Object {i+1}: Could not retrieve data via any method")
                         continue
                     
                     # Convert to string if needed
                     if isinstance(raw_data, bytes):
                         raw_data = raw_data.decode('utf-8', errors='ignore')
                     
-                    if not isinstance(raw_data, str):
-                        app.logger.warning(f"Object {i+1}: Data is not string after conversion")
-                        continue
-                    
-                    app.logger.info(f"Object {i+1}: Data length = {len(raw_data)} characters")
-                    
-                    if 'BEGIN:VEVENT' not in raw_data:
-                        app.logger.info(f"Object {i+1}: No VEVENT found in data")
+                    if not isinstance(raw_data, str) or 'BEGIN:VEVENT' not in raw_data:
                         continue
                     
                     obj_url = getattr(obj, 'url', f'/event/{i}')
@@ -846,23 +442,14 @@ class CalDAVClient:
                         if (event_start.date() <= end_date.date() and 
                             event_end.date() >= start_date.date()):
                             event_list.append(parsed_event)
-                            app.logger.info(f"Added event: {parsed_event['summary']}")
-                        else:
-                            app.logger.debug(f"Event outside date range: {parsed_event['summary']}")
                     
-                except Exception as obj_error:
-                    app.logger.error(f"Error processing object {i+1}: {obj_error}")
-                    import traceback
-                    app.logger.error(f"Traceback: {traceback.format_exc()}")
+                except Exception:
                     continue
             
-            app.logger.info(f"Returning {len(event_list)} events")
             return event_list
             
         except Exception as e:
             app.logger.error(f"Error in get_events: {e}")
-            import traceback
-            app.logger.error(f"Traceback: {traceback.format_exc()}")
             return []
 
     def _parse_event(self, ical_text, event_url, start_date, end_date):
@@ -874,7 +461,6 @@ class CalDAVClient:
             
             # Basic validation
             if not isinstance(ical_text, str) or 'BEGIN:VEVENT' not in ical_text:
-                app.logger.warning(f"Invalid iCal data for {event_url}")
                 return []
             
             # Try to parse
@@ -890,10 +476,8 @@ class CalDAVClient:
                         if event_data.get('rrule'):
                             expanded = self._expand_recurring_event(event_data, start_date, end_date)
                             events.extend(expanded)
-                            app.logger.debug(f"Expanded recurring event into {len(expanded)} occurrences")
                         else:
                             events.append(event_data)
-                            app.logger.debug(f"Added single event: {event_data['summary']}")
             
             return events
                     
@@ -951,41 +535,34 @@ class CalDAVClient:
                 except:
                     pass
             
-            # Extract EXDATE entries - FIXED VERSION
+            # Extract EXDATE entries
             exdates = component.get('exdate')
             if exdates:
                 exdate_list = []
                 try:
-                    app.logger.info(f"Raw EXDATE data: {exdates} (type: {type(exdates)})")
-                    
                     # Handle different EXDATE storage formats
                     if hasattr(exdates, 'dts'):
                         # Multiple dates in a single vDDDLists object
-                        app.logger.info(f"Found EXDATE with vDDDLists: {len(exdates.dts)} dates")
                         for dt in exdates.dts:
                             if hasattr(dt, 'dt'):
                                 exdate_dt = dt.dt
                                 if hasattr(exdate_dt, 'tzinfo') and exdate_dt.tzinfo:
                                     exdate_dt = exdate_dt.replace(tzinfo=None)
                                 exdate_list.append(exdate_dt)
-                                app.logger.info(f"Parsed EXDATE (from vDDDLists): {exdate_dt}")
                     elif hasattr(exdates, 'dt'):
                         # Single datetime
                         exdate_dt = exdates.dt
                         if hasattr(exdate_dt, 'tzinfo') and exdate_dt.tzinfo:
                             exdate_dt = exdate_dt.replace(tzinfo=None)
                         exdate_list.append(exdate_dt)
-                        app.logger.info(f"Parsed EXDATE (single): {exdate_dt}")
                     elif isinstance(exdates, list):
                         # List of EXDATE entries
-                        app.logger.info(f"Found EXDATE list with {len(exdates)} entries")
                         for exdate in exdates:
                             if hasattr(exdate, 'dt'):
                                 exdate_dt = exdate.dt
                                 if hasattr(exdate_dt, 'tzinfo') and exdate_dt.tzinfo:
                                     exdate_dt = exdate_dt.replace(tzinfo=None)
                                 exdate_list.append(exdate_dt)
-                                app.logger.info(f"Parsed EXDATE (from list): {exdate_dt}")
                             elif hasattr(exdate, 'dts'):
                                 for dt in exdate.dts:
                                     if hasattr(dt, 'dt'):
@@ -993,37 +570,18 @@ class CalDAVClient:
                                         if hasattr(exdate_dt, 'tzinfo') and exdate_dt.tzinfo:
                                             exdate_dt = exdate_dt.replace(tzinfo=None)
                                         exdate_list.append(exdate_dt)
-                                        app.logger.info(f"Parsed EXDATE (from list->dts): {exdate_dt}")
                     else:
-                        # Try direct conversion or ical parsing
+                        # Try direct conversion
                         try:
                             if isinstance(exdates, (datetime, date)):
                                 exdate_list.append(exdates)
-                                app.logger.info(f"Parsed EXDATE (direct): {exdates}")
-                            elif hasattr(exdates, 'to_ical'):
-                                ical_str = exdates.to_ical().decode('utf-8')
-                                app.logger.info(f"Parsing EXDATE from ical string: {ical_str}")
-                                for date_str in ical_str.split(','):
-                                    parsed_date = self._parse_date(date_str.strip())
-                                    if parsed_date:
-                                        exdate_list.append(parsed_date)
-                                        app.logger.info(f"Parsed EXDATE (from ical): {parsed_date}")
-                        except Exception as e2:
-                            app.logger.warning(f"Failed to parse EXDATE: {e2}")
-                    
-                    # REMOVED: The problematic multiple EXDATE properties check
-                    # This was causing the contamination by pulling in old/invalid EXDATE entries
-                    # The component.get('exdate') above should handle all valid EXDATE entries
+                        except Exception:
+                            pass
                     
                     event_data['exdates'] = exdate_list
-                    app.logger.info(f"Final EXDATE list for {summary}: {[str(ed) for ed in exdate_list]}")
                     
                 except Exception as e:
                     app.logger.error(f"Error parsing EXDATE for event {summary}: {e}")
-                    app.logger.error(f"EXDATE raw data: {exdates}")
-                    app.logger.error(f"EXDATE type: {type(exdates)}")
-                    import traceback
-                    app.logger.error(f"Traceback: {traceback.format_exc()}")
             
             return event_data
             
@@ -1059,7 +617,6 @@ class CalDAVClient:
             
             # Get EXDATE list from base event if it exists
             exdates = base_event.get('exdates', [])
-            app.logger.info(f"Found {len(exdates)} EXDATE entries for recurring event: {base_event['summary']}")
             
             # Calculate event duration
             duration = base_event['end'] - base_event['start']
@@ -1105,7 +662,6 @@ class CalDAVClient:
                     
                     if exdate_date == current_date_date:
                         is_excluded = True
-                        app.logger.info(f"Excluding occurrence on {current_date_date} due to EXDATE")
                         break
                 
                 # Only add if not excluded and within date range
@@ -1155,7 +711,6 @@ class CalDAVClient:
                 if occurrence_count > 1000:
                     break
             
-            app.logger.info(f"Expanded recurring event '{base_event['summary']}' into {len(events)} occurrences (excluded {len(exdates)} via EXDATE)")
             return events
             
         except Exception as e:
@@ -1195,8 +750,7 @@ class CalDAVClient:
             
             return None
             
-        except Exception as e:
-            app.logger.warning(f"Date parsing failed for '{date_str}': {e}")
+        except Exception:
             return None
 
     def create_event(self, summary, description, location, start_dt, end_dt, rrule=None):
@@ -1206,8 +760,6 @@ class CalDAVClient:
             return False
         
         try:
-            app.logger.info(f"Creating event: {summary}")
-            
             # Ensure timezone-naive datetimes for CalDAV compatibility
             if hasattr(start_dt, 'tzinfo') and start_dt.tzinfo:
                 start_dt = start_dt.replace(tzinfo=None)
@@ -1235,14 +787,11 @@ class CalDAVClient:
                     if rrule_dict:
                         recur = vRecur(rrule_dict)
                         event.add('rrule', recur)
-                        app.logger.info(f"Added RRULE: {rrule_dict}")
                 except Exception as e:
                     app.logger.error(f"Error adding RRULE: {e}")
             
             cal.add_component(event)
             ical_data = cal.to_ical()
-            
-            app.logger.info(f"Generated iCal data ({len(ical_data)} bytes)")
             
             self.calendar.save_event(ical_data)
             app.logger.info("Event created successfully")
@@ -1283,42 +832,6 @@ class CalDAVClient:
             app.logger.error(f"Error parsing RRULE string: {e}")
             return None
 
-    def create_test_recurring_event(self):
-        """Create a test recurring event for debugging"""
-        if not self.calendar:
-            app.logger.error("No calendar selected for test event creation")
-            return False
-        
-        try:
-            app.logger.info("Creating test recurring event...")
-            
-            # Create a simple weekly recurring event
-            now = datetime.now()
-            start_time = now.replace(hour=10, minute=0, second=0, microsecond=0)
-            end_time = start_time + timedelta(hours=1)
-            
-            # Simple weekly RRULE
-            rrule = "FREQ=WEEKLY;COUNT=5"
-            
-            success = self.create_event(
-                "Test Recurring Event",
-                "This is a test event created for debugging recurring functionality",
-                "Test Location",
-                start_time,
-                end_time,
-                rrule
-            )
-            
-            if success:
-                app.logger.info("Test recurring event created successfully")
-            else:
-                app.logger.error("Failed to create test recurring event")
-                
-            return success
-            
-        except Exception as e:
-            app.logger.error(f"Error creating test event: {e}")
-            return False
 
 def get_caldav_url(username, base_url, server_type):
     """Generate CalDAV URL based on server type"""
@@ -1350,90 +863,6 @@ def health_check():
         'message': 'CalDAV Web Client is running',
         'version': '2.1.0'
     })
-
-@app.route('/debug')
-def debug_info():
-    """Debug information endpoint"""
-    return jsonify({
-        'flask_env': os.environ.get('FLASK_ENV', 'not set'),
-        'caldav_server_url': os.environ.get('CALDAV_SERVER_URL', 'not set'),
-        'caldav_server_type': os.environ.get('CALDAV_SERVER_TYPE', 'not set'),
-        'session_keys': list(session.keys()) if session else [],
-        'request_path': request.path,
-        'request_url': request.url
-    })
-
-@app.route('/debug/interface')
-def debug_interface():
-    """Debug interface for testing CalDAV functionality"""
-    if 'username' not in session:
-        return redirect(url_for('login'))
-    return render_template('debug.html')
-
-@app.route('/debug/calendar', methods=['GET'])
-def debug_calendar():
-    """Debug endpoint to inspect calendar contents"""
-    if 'username' not in session:
-        return jsonify({'error': 'Not authenticated'}), 401
-    
-    calendar_name = request.args.get('calendar')
-    if not calendar_name:
-        return jsonify({'error': 'Calendar name required'}), 400
-    
-    # Check session data
-    if not all(key in session for key in ['username', 'password', 'caldav_url']):
-        return jsonify({'error': 'Session incomplete'}), 401
-    
-    client = CalDAVClient(session['username'], session['password'], 
-                         session['caldav_url'], session.get('server_type', 'generic'))
-    
-    if not client.connect():
-        return jsonify({'error': 'CalDAV connection failed'}), 500
-    
-    if not client.select_calendar(calendar_name):
-        return jsonify({'error': f'Calendar "{calendar_name}" not found'}), 500
-    
-    # Run enhanced debug
-    client.debug_raw_calendar_data()
-    
-    return jsonify({'message': 'Enhanced debug info written to logs'})
-
-@app.route('/debug/create-test-event', methods=['POST'])
-def create_test_event():
-    """Create a test recurring event"""
-    if 'username' not in session:
-        return jsonify({'error': 'Not authenticated'}), 401
-    
-    data = request.get_json() or {}
-    calendar_name = data.get('calendar_name')
-    
-    if not calendar_name:
-        prefs = get_user_preferences()
-        selected_calendars = prefs.get('selected_calendars', [])
-        if not selected_calendars:
-            return jsonify({'error': 'No calendars available'}), 400
-        calendar_name = selected_calendars[0]
-    
-    # Check session data
-    if not all(key in session for key in ['username', 'password', 'caldav_url']):
-        return jsonify({'error': 'Session incomplete'}), 401
-    
-    client = CalDAVClient(session['username'], session['password'], 
-                         session['caldav_url'], session.get('server_type', 'generic'))
-    
-    if not client.connect():
-        return jsonify({'error': 'CalDAV connection failed'}), 500
-    
-    if not client.select_calendar(calendar_name):
-        return jsonify({'error': f'Calendar "{calendar_name}" not found'}), 500
-    
-    # Create test event
-    success = client.create_test_recurring_event()
-    
-    if success:
-        return jsonify({'success': True, 'message': 'Test recurring event created'})
-    else:
-        return jsonify({'error': 'Failed to create test event'}), 500
 
 @app.route('/')
 def index():
@@ -1559,8 +988,6 @@ def api_events():
             '#fd7e14', '#20c997', '#e83e8c', '#6c757d', '#17a2b8'
         ]
         
-        app.logger.info(f"Processing {len(selected_calendars)} selected calendars")
-        
         for i, calendar_name in enumerate(selected_calendars):
             if client.select_calendar(calendar_name):
                 events = client.get_events(start_dt, end_dt)
@@ -1584,14 +1011,11 @@ def api_events():
                         'original_uid': event.get('original_uid', event['uid'])
                     }
                     all_events.append(formatted_event)
-            else:
-                app.logger.warning(f"Could not select calendar: {calendar_name}")
         
-        app.logger.info(f"Returning {len(all_events)} total events")
         return jsonify(all_events)
     
     elif request.method == 'POST':
-        # Create event functionality here
+        # Create event functionality
         if 'username' not in session:
             return jsonify({'error': 'Not authenticated'}), 401
         
@@ -1649,7 +1073,6 @@ def api_events():
                     pass
             
             rrule = ';'.join(rrule_parts)
-            app.logger.info(f"Created RRULE: {rrule}")
         
         # Create the event
         try:
@@ -1671,100 +1094,12 @@ def api_events():
             app.logger.error(f"Exception during event creation: {e}")
             return jsonify({'error': f'Error creating event: {str(e)}'}), 500
 
-@app.route('/api/events/<path:event_id>', methods=['PUT'])
-def api_update_event(event_id):
-    """API endpoint to update event"""
-    event_id = unquote(event_id)
-    
-    if 'username' not in session:
-        return jsonify({'error': 'Not authenticated'}), 401
-    
-    data = request.get_json()
-    if not data:
-        return jsonify({'error': 'No data provided'}), 400
-    
-    try:
-        start_dt = datetime.fromisoformat(data['start'].replace('Z', '+00:00'))
-        end_dt = datetime.fromisoformat(data['end'].replace('Z', '+00:00'))
-    except (ValueError, KeyError):
-        return jsonify({'error': 'Invalid date format'}), 400
-    
-    # Extract calendar name from event ID
-    if ':' in event_id:
-        calendar_name, uid = event_id.split(':', 1)
-    else:
-        prefs = get_user_preferences()
-        selected_calendars = prefs.get('selected_calendars', [])
-        calendar_name = selected_calendars[0] if selected_calendars else None
-        uid = event_id
-    
-    if not calendar_name:
-        return jsonify({'error': 'Cannot determine target calendar'}), 400
-    
-    event_url = data.get('url')
-    if not event_url:
-        return jsonify({'error': 'Event URL required for updates'}), 400
-    
-    # Check session data
-    if not all(key in session for key in ['username', 'password', 'caldav_url']):
-        return jsonify({'error': 'Session incomplete'}), 401
-    
-    try:
-        client = CalDAVClient(session['username'], session['password'], 
-                             session['caldav_url'], session.get('server_type', 'generic'))
-        
-        if not client.connect():
-            return jsonify({'error': 'CalDAV connection failed'}), 500
-        
-        if not client.select_calendar(calendar_name):
-            return jsonify({'error': f'Calendar "{calendar_name}" not found'}), 500
-        
-        # Build RRULE string if recurrence is specified
-        rrule = None
-        if data.get('recurring') and data.get('recurring') != 'none':
-            rrule_parts = [f"FREQ={data['recurring'].upper()}"]
-            
-            if data.get('recurring_interval') and int(data.get('recurring_interval', 1)) > 1:
-                rrule_parts.append(f"INTERVAL={data['recurring_interval']}")
-            
-            if data.get('recurring_count'):
-                rrule_parts.append(f"COUNT={data['recurring_count']}")
-            elif data.get('recurring_until'):
-                try:
-                    until_date = datetime.fromisoformat(data['recurring_until'] + 'T23:59:59')
-                    rrule_parts.append(f"UNTIL={until_date.strftime('%Y%m%dT%H%M%SZ')}")
-                except Exception:
-                    pass
-            
-            rrule = ';'.join(rrule_parts)
-        
-        # Update the event (implementation needed)
-        # For now, return not implemented
-        return jsonify({'error': 'Update functionality not yet implemented'}), 501
-            
-    except Exception as e:
-        app.logger.error(f"Exception during event update: {e}")
-        return jsonify({'error': f'Error updating event: {str(e)}'}), 500
-
-@app.route('/debug/test-delete/<path:event_id>', methods=['GET'])
-def test_delete_route(event_id):
-    """Test endpoint to verify delete route is working"""
-    return jsonify({
-        'message': f'Delete route is working for event_id: {event_id}',
-        'decoded_id': unquote(event_id)
-    })
-
 @app.route('/api/events/<path:event_id>', methods=['DELETE'])
 def api_delete_event(event_id):
     """API endpoint to delete event with recurring options support"""
     event_id = unquote(event_id)
-    app.logger.info(f"=== DELETE REQUEST RECEIVED ===")
-    app.logger.info(f"Delete request for event ID: {event_id}")
-    app.logger.info(f"Request method: {request.method}")
-    app.logger.info(f"Request headers: {dict(request.headers)}")
     
     if 'username' not in session:
-        app.logger.error("Not authenticated")
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Extract calendar name from event ID
@@ -1779,26 +1114,16 @@ def api_delete_event(event_id):
     if not calendar_name:
         return jsonify({'error': 'Cannot determine target calendar'}), 400
     
-    app.logger.info(f"Deleting from calendar: {calendar_name}, UID: {uid}")
-    
     # Get delete options from request data
     try:
         data = request.get_json() or {}
-        app.logger.info(f"Delete request data: {data}")
-    except Exception as e:
-        app.logger.error(f"Error parsing request data: {e}")
+    except Exception:
         return jsonify({'error': 'Invalid JSON data'}), 400
     
     event_url = data.get('url')
     delete_type = data.get('deleteType', 'single')
     event_date = data.get('eventDate')
     original_uid = data.get('originalUid')
-    
-    app.logger.info(f"Delete type: {delete_type}")
-    app.logger.info(f"Event URL: {event_url}")
-    app.logger.info(f"Event date: {event_date}")
-    app.logger.info(f"Original UID: {original_uid}")
-    app.logger.info(f"Is recurring event: {uid.endswith('_recurrence_0') or '_recurrence_' in uid}")
     
     # Check session data
     if not all(key in session for key in ['username', 'password', 'caldav_url']):
@@ -1818,8 +1143,7 @@ def api_delete_event(event_id):
         success = False
         
         if delete_type == 'single' or not event_url:
-            # For single events or when we don't have the event URL, 
-            # try to find and delete by UID
+            # For single events or when we don't have the event URL
             success = client.delete_event_by_uid(uid)
         elif delete_type == 'this':
             if not original_uid or not event_date:
@@ -1837,10 +1161,8 @@ def api_delete_event(event_id):
             return jsonify({'error': f'Invalid delete type: {delete_type}'}), 400
         
         if success:
-            app.logger.info(f"Successfully deleted event: {uid}")
             return jsonify({'success': True})
         else:
-            app.logger.error(f"Failed to delete event: {uid}")
             return jsonify({'error': f'Failed to delete event (type: {delete_type})'}), 500
             
     except Exception as e:
