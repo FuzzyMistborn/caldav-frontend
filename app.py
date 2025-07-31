@@ -200,73 +200,70 @@ class CalDAVClient:
                             exception_datetime = exception_datetime.date()
                             app.logger.info(f"Using date-only exception: {exception_datetime}")
                     
-                    # Add EXDATE
+                    # Check if this date is already excluded
+                    existing_exdates = []
                     if 'exdate' in component:
-                        existing_exdates = component['exdate']
-                        app.logger.info(f"Found existing EXDATE: {existing_exdates} (type: {type(existing_exdates)})")
+                        existing_exdate = component['exdate']
+                        app.logger.info(f"Found existing EXDATE: {existing_exdate} (type: {type(existing_exdate)})")
                         
-                        # Handle different EXDATE formats
-                        if hasattr(existing_exdates, 'dts'):
-                            # It's a vDDDLists object - check if our date is already there
-                            already_exists = False
-                            for existing_dt in existing_exdates.dts:
+                        # Handle different EXDATE formats and collect all existing dates
+                        if hasattr(existing_exdate, 'dts'):
+                            # It's a vDDDLists object
+                            for existing_dt in existing_exdate.dts:
                                 if hasattr(existing_dt, 'dt'):
                                     existing_date = existing_dt.dt
-                                    if hasattr(existing_date, 'date'):
-                                        existing_date = existing_date.date()
-                                    if hasattr(exception_datetime, 'date'):
-                                        exception_date = exception_datetime.date()
-                                    else:
-                                        exception_date = exception_datetime
-                                    
-                                    if existing_date == exception_date:
-                                        already_exists = True
-                                        app.logger.info(f"EXDATE {exception_datetime} already exists, skipping")
-                                        break
-                            
-                            if not already_exists:
-                                # Create a new vDDDLists with all dates including the new one
-                                from icalendar.prop import vDDDLists, vDatetime
-                                new_exdate_list = vDDDLists([])
-                                
-                                # Add existing dates
-                                for existing_dt in existing_exdates.dts:
-                                    new_exdate_list.dts.append(existing_dt)
-                                
-                                # Add new date
-                                new_exdate_list.dts.append(vDatetime(exception_datetime))
-                                component['exdate'] = new_exdate_list
-                                app.logger.info(f"Added to vDDDLists: {len(new_exdate_list.dts)} total dates")
-                        elif isinstance(existing_exdates, list):
-                            # It's already a list - check for duplicates
-                            already_exists = any(
-                                (hasattr(ex, 'date') and ex.date() == exception_datetime.date()) or 
-                                ex == exception_datetime 
-                                for ex in existing_exdates
-                            )
-                            if not already_exists:
-                                existing_exdates.append(exception_datetime)
-                                component['exdate'] = existing_exdates
-                                app.logger.info(f"Added to existing list: {len(existing_exdates)} total dates")
+                                    if hasattr(existing_date, 'tzinfo') and existing_date.tzinfo:
+                                        existing_date = existing_date.replace(tzinfo=None)
+                                    existing_exdates.append(existing_date)
+                                    app.logger.info(f"Found existing EXDATE: {existing_date}")
+                        elif isinstance(existing_exdate, list):
+                            # It's already a list
+                            for ex in existing_exdate:
+                                if hasattr(ex, 'dt'):
+                                    existing_date = ex.dt
+                                    if hasattr(existing_date, 'tzinfo') and existing_date.tzinfo:
+                                        existing_date = existing_date.replace(tzinfo=None)
+                                    existing_exdates.append(existing_date)
+                                    app.logger.info(f"Found existing EXDATE from list: {existing_date}")
                         else:
-                            # Single existing EXDATE - convert to list
-                            existing_date = existing_exdates
-                            if hasattr(existing_date, 'dt'):
-                                existing_date = existing_date.dt
-                            
-                            # Check if it's the same date
-                            if hasattr(existing_date, 'date') and hasattr(exception_datetime, 'date'):
-                                if existing_date.date() == exception_datetime.date():
-                                    app.logger.info(f"EXDATE {exception_datetime} already exists as single entry, skipping")
-                                    return True
-                            
-                            # Create new list with both dates
-                            new_exdates = [existing_exdates, exception_datetime]
-                            component['exdate'] = new_exdates
-                            app.logger.info(f"Created new EXDATE list with 2 dates")
-                    else:
-                        component.add('exdate', exception_datetime)
-                        app.logger.info(f"Added new EXDATE: {exception_datetime}")
+                            # Single existing EXDATE
+                            if hasattr(existing_exdate, 'dt'):
+                                existing_date = existing_exdate.dt
+                                if hasattr(existing_date, 'tzinfo') and existing_date.tzinfo:
+                                    existing_date = existing_date.replace(tzinfo=None)
+                                existing_exdates.append(existing_date)
+                                app.logger.info(f"Found single existing EXDATE: {existing_date}")
+                    
+                    # Check if our target date is already in the EXDATE list
+                    already_exists = False
+                    for existing_date in existing_exdates:
+                        if hasattr(existing_date, 'date') and hasattr(exception_datetime, 'date'):
+                            if existing_date.date() == exception_datetime.date():
+                                already_exists = True
+                                app.logger.info(f"EXDATE {exception_datetime} already exists, skipping")
+                                break
+                        elif existing_date == exception_datetime:
+                            already_exists = True
+                            app.logger.info(f"EXDATE {exception_datetime} already exists, skipping")
+                            break
+                    
+                    if already_exists:
+                        app.logger.info("Target date already excluded, nothing to do")
+                        return True
+                    
+                    # Add the new EXDATE
+                    existing_exdates.append(exception_datetime)
+                    
+                    # Create a fresh vDDDLists with only the dates we want
+                    from icalendar.prop import vDDDLists, vDatetime
+                    new_exdate_list = vDDDLists([])
+                    
+                    for exdate in existing_exdates:
+                        new_exdate_list.dts.append(vDatetime(exdate))
+                    
+                    # Replace the EXDATE property completely
+                    component['exdate'] = new_exdate_list
+                    app.logger.info(f"Created new EXDATE list with {len(new_exdate_list.dts)} dates")
                     
                     modified = True
                     break
