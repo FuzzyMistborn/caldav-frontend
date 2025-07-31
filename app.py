@@ -150,7 +150,9 @@ class CalDAVClient:
                     # Try different methods to get data
                     data_methods = [
                         ('obj.data', lambda: getattr(obj, 'data', None)),
+                        ('obj.load() then obj.data', lambda: self._try_load_then_data(obj)),
                         ('obj.get_data()', lambda: obj.get_data() if hasattr(obj, 'get_data') else None),
+                        ('manual fetch', lambda: self._try_manual_fetch(obj)),
                         ('str(obj)', lambda: str(obj) if obj else None)
                     ]
                     
@@ -266,6 +268,24 @@ class CalDAVClient:
             app.logger.error(f"Error in debug_raw_calendar_data: {e}")
             app.logger.error(f"Traceback: {traceback.format_exc()}")
 
+    def _try_load_then_data(self, obj):
+        """Helper method to try loading object then getting data"""
+        try:
+            obj.load()
+            return getattr(obj, 'data', None)
+        except:
+            return None
+
+    def _try_manual_fetch(self, obj):
+        """Helper method to try manual fetch of object data"""
+        try:
+            response = self.client.request(obj.url)
+            if response.status == 200:
+                return response.raw
+        except:
+            pass
+        return None
+
     def get_events(self, start_date, end_date):
         """Get events from calendar with recurring event expansion"""
         if not self.calendar:
@@ -282,12 +302,61 @@ class CalDAVClient:
             
             for i, obj in enumerate(all_objects):
                 try:
-                    raw_data = obj.data
+                    app.logger.info(f"Processing object {i+1}: {obj.url}")
+                    
+                    # Try multiple methods to get the actual iCalendar data
+                    raw_data = None
+                    
+                    # Method 1: Try obj.data
+                    if hasattr(obj, 'data') and obj.data:
+                        raw_data = obj.data
+                        app.logger.info(f"Object {i+1}: Got data via obj.data")
+                    
+                    # Method 2: Try to load the data explicitly
+                    if not raw_data:
+                        try:
+                            obj.load()  # Explicitly load the object data
+                            if hasattr(obj, 'data') and obj.data:
+                                raw_data = obj.data
+                                app.logger.info(f"Object {i+1}: Got data after obj.load()")
+                        except Exception as e:
+                            app.logger.warning(f"Object {i+1}: obj.load() failed: {e}")
+                    
+                    # Method 3: Try get_data()
+                    if not raw_data and hasattr(obj, 'get_data'):
+                        try:
+                            raw_data = obj.get_data()
+                            if raw_data:
+                                app.logger.info(f"Object {i+1}: Got data via obj.get_data()")
+                        except Exception as e:
+                            app.logger.warning(f"Object {i+1}: get_data() failed: {e}")
+                    
+                    # Method 4: Try to fetch manually using the client
+                    if not raw_data:
+                        try:
+                            response = self.client.request(obj.url)
+                            if response.status == 200:
+                                raw_data = response.raw
+                                app.logger.info(f"Object {i+1}: Got data via manual fetch")
+                        except Exception as e:
+                            app.logger.warning(f"Object {i+1}: Manual fetch failed: {e}")
+                    
+                    if not raw_data:
+                        app.logger.warning(f"Object {i+1}: Could not retrieve data via any method")
+                        continue
+                    
+                    # Convert to string if needed
                     if isinstance(raw_data, bytes):
                         raw_data = raw_data.decode('utf-8', errors='ignore')
                     
-                    if not isinstance(raw_data, str) or 'BEGIN:VEVENT' not in raw_data:
-                        app.logger.debug(f"Object {i+1}: Not a VEVENT")
+                    if not isinstance(raw_data, str):
+                        app.logger.warning(f"Object {i+1}: Data is not string after conversion")
+                        continue
+                    
+                    app.logger.info(f"Object {i+1}: Data length = {len(raw_data)} characters")
+                    
+                    if 'BEGIN:VEVENT' not in raw_data:
+                        app.logger.info(f"Object {i+1}: No VEVENT found in data")
                         continue
                     
                     obj_url = getattr(obj, 'url', f'/event/{i}')
@@ -303,10 +372,14 @@ class CalDAVClient:
                         if (event_start.date() <= end_date.date() and 
                             event_end.date() >= start_date.date()):
                             event_list.append(parsed_event)
-                            app.logger.debug(f"Added event: {parsed_event['summary']}")
+                            app.logger.info(f"Added event: {parsed_event['summary']}")
+                        else:
+                            app.logger.debug(f"Event outside date range: {parsed_event['summary']}")
                     
                 except Exception as obj_error:
                     app.logger.error(f"Error processing object {i+1}: {obj_error}")
+                    import traceback
+                    app.logger.error(f"Traceback: {traceback.format_exc()}")
                     continue
             
             app.logger.info(f"Returning {len(event_list)} events")
@@ -314,6 +387,8 @@ class CalDAVClient:
             
         except Exception as e:
             app.logger.error(f"Error in get_events: {e}")
+            import traceback
+            app.logger.error(f"Traceback: {traceback.format_exc()}")
             return []
 
     def _parse_event(self, ical_text, event_url, start_date, end_date):
